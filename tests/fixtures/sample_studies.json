@@ -1,0 +1,29 @@
+[
+  {
+    "identificationModule": {"nctId": "NCT001", "briefTitle": "Phase 3 study of DrugA in diabetes"},
+    "statusModule": {"overallStatus": "RECRUITING", "startDateStruct": {"date": "2015-03-01"}},
+    "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor X"}},
+    "conditionsModule": {"conditions": ["Diabetes"]},
+    "designModule": {"phases": ["PHASE3"]},
+    "armsInterventionsModule": {"interventions": [{"type": "DRUG", "name": "DrugA"}, {"type": "DRUG", "name": "DrugB"}]},
+    "contactsLocationsModule": {"locations": [{"country": "United States"}, {"country": "Canada"}]}
+  },
+  {
+    "identificationModule": {"nctId": "NCT002", "briefTitle": "Phase 2 combination trial"},
+    "statusModule": {"overallStatus": "COMPLETED", "startDateStruct": {"date": "2015-08-15"}},
+    "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor X"}},
+    "conditionsModule": {"conditions": ["Diabetes"]},
+    "designModule": {"phases": ["PHASE2"]},
+    "armsInterventionsModule": {"interventions": [{"type": "DRUG", "name": "DrugA"}, {"type": "DRUG", "name": "DrugC"}]},
+    "contactsLocationsModule": {"locations": [{"country": "United States"}]}
+  },
+  {
+    "identificationModule": {"nctId": "NCT003", "briefTitle": "Device study, no phase"},
+    "statusModule": {"overallStatus": "RECRUITING", "startDateStruct": {"date": "2020-01-10"}},
+    "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor Y"}},
+    "conditionsModule": {"conditions": ["Diabetes"]},
+    "designModule": {},
+    "armsInterventionsModule": {"interventions": [{"type": "DEVICE", "name": "Pump"}]},
+    "contactsLocationsModule": {"locations": [{"country": "Canada"}, {"country": "Canada"}]}
+  }
+]

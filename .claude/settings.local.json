@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ANTHROPIC_API_KEY=test-key uv run python -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"https://clinicaltrials.gov/api/v2/studies?query.cond=diabetes&pageSize=1\")",
+      "Bash(curl -s -A \"\" -o /dev/null -w \"%{http_code}\\\\n\" \"https://clinicaltrials.gov/api/v2/studies?query.cond=diabetes&pageSize=1\")",
+      "Bash(uv run python -c ' *)",
+      "Bash(curl -sv \"https://clinicaltrials.gov/api/v2/studies?query.cond=diabetes&pageSize=1\" -o /dev/null)",
+      "Bash(uv add *)",
+      "Bash(uv sync *)",
+      "Bash(curl -s \"https://clinicaltrials.gov/api/v2/studies?query.cond=breast+cancer&query.locn=Canada&filter.overallStatus=RECRUITING&pageSize=1&countTotal=true&fields=NCTId\")",
+      "Bash(curl -s \"https://clinicaltrials.gov/api/v2/studies?query.intr=pembrolizumab&filter.advanced=AREA%5BStartDate%5DRANGE%5B2015-01-01,MAX%5D&pageSize=1&countTotal=true&fields=NCTId\")",
+      "Bash(curl -s \"https://clinicaltrials.gov/api/v2/studies?query.intr=pembrolizumab&aggFilters=phase:2&pageSize=1&countTotal=true&fields=NCTId,Phase\")"
+    ]
+  }
+}
