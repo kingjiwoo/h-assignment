@@ -40,6 +40,9 @@ class Session:
     final_artifact_id: str | None = None
     final_chart_type: str | None = None
     final_title: str | None = None
+    # 에이전트가 "무엇을 조회할지 특정 불가"라고 스스로 선언했을 때 채워진다 (honest abstention 1겹).
+    # {"reason": str, "missing": [str, ...]} 형태.
+    unresolved: dict | None = None
     _artifact_seq: int = 0
 
     def index_studies(self, studies: list[dict]) -> None:

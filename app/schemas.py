@@ -10,6 +10,7 @@ ChartType = Literal[
     "histogram",
     "network_graph",
     "no_data",
+    "needs_clarification",
 ]
 
 AnalysisType = Literal["time_trend", "distribution", "comparison", "geo", "network"]
@@ -39,6 +40,18 @@ class Citation(BaseModel):
     excerpt: str
 
 
+class Clarification(BaseModel):
+    """질문만으로 무엇을 조회할지 특정할 수 없을 때, 사용자에게 무엇이 부족한지 알려준다.
+
+    no_data(조회는 했으나 결과 0건)와 달리, needs_clarification은 '조회 대상 자체를 못 정함'을
+    의미한다. 에이전트가 근거 없이 추측하는 대신 정직하게 "모르겠다"를 반환하기 위한 필드.
+    """
+
+    reason: str
+    missing: list[str] = Field(default_factory=list, description="특정하지 못한 항목 (예: condition, drug_name)")
+    suggestions: list[str] = Field(default_factory=list, description="사용자가 추가하면 좋은 정보 안내")
+
+
 class VisualizationSpec(BaseModel):
     type: ChartType
     title: str
@@ -59,3 +72,4 @@ class QueryResponse(BaseModel):
     visualization: VisualizationSpec
     meta: ResponseMeta
     citations: dict[str, list[Citation]] | None = None
+    clarification: Clarification | None = None
