@@ -1,8 +1,10 @@
 """FastAPI 진입점. POST /query 하나로 전체 파이프라인을 노출한다."""
 
 import logging
+import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.agent.runner import run_agent
 from app.schemas import QueryRequest, QueryResponse
@@ -14,6 +16,18 @@ app = FastAPI(
     title="ClinicalTrials.gov Query-to-Visualization Agent",
     description="자연어 임상시험 질문을 구조화된 시각화 스펙(JSON)으로 변환하는 백엔드",
     version="0.1.0",
+)
+
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_allowed_origins = [
+    o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
