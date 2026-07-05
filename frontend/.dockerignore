@@ -1,0 +1,9 @@
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+.env
+.env.*
+!.env.example
+.git/
+.DS_Store
+README.md
