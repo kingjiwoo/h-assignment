@@ -1,6 +1,6 @@
 """query_builder 파라미터 매핑 테스트."""
 
-from app.graph.nodes.query_builder import build_ctgov_params
+from app.core.query import build_ctgov_params
 
 
 def test_basic_text_filters():

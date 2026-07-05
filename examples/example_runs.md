@@ -1,8 +1,8 @@
 # 예시 실행 결과 (Example Runs)
 
-> 생성 모드: **injected (intent 주입, 데이터는 실제 API)**
-> 모든 `data`/`citations` 값은 ClinicalTrials.gov v2 API의 실제 응답에서 집계된 것입니다.
-> `injected` 모드에서는 자연어→intent 해석 단계만 사람이 대체했고, 나머지 파이프라인 (쿼리 생성·API 조회·집계·차트 선택·스펙 조립)은 실제 코드가 그대로 실행했습니다.
+> 생성 모드: **scripted (도구 시퀀스 재현, 데이터·집계는 실제 API/코드)**
+> 모든 `data`/`citations` 값은 ClinicalTrials.gov v2 API의 실제 응답을 결정론적 도구가 집계한 것입니다.
+> `scripted` 모드에서는 에이전트가 런타임에 선택할 **도구 호출 순서만** 사람이 재현했고, 검색·집계·조립은 실제 코드가 그대로 실행했습니다(수치는 LLM을 거치지 않음).
 
 ## Time trend — 특정 약물의 연도별 시험 수
 
@@ -18,7 +18,7 @@
 {
   "visualization": {
     "type": "time_series",
-    "title": "Trials over time for Pembrolizumab",
+    "title": "Pembrolizumab trials over time (since 2015)",
     "encoding": {
       "x": {
         "field": "year",
@@ -87,7 +87,7 @@
     "study_count": 300,
     "capped": true,
     "notes": [
-      "결과가 상한(MAX_STUDIES)에 걸려 최근/상위 일부 study만 집계했습니다. 수치는 전체가 아닌 표본 기준입니다."
+      "'default' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다."
     ]
   },
   "citations": {
@@ -278,7 +278,7 @@
 {
   "visualization": {
     "type": "bar_chart",
-    "title": "Trial distribution by phase for diabetes",
+    "title": "Diabetes trials by phase",
     "encoding": {
       "x": {
         "field": "category",
@@ -325,7 +325,7 @@
     "study_count": 300,
     "capped": true,
     "notes": [
-      "결과가 상한(MAX_STUDIES)에 걸려 최근/상위 일부 study만 집계했습니다. 수치는 전체가 아닌 표본 기준입니다."
+      "'default' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다."
     ]
   },
   "citations": {
@@ -423,7 +423,7 @@
 {
   "visualization": {
     "type": "grouped_bar_chart",
-    "title": "Comparison of trials: Clinical trials",
+    "title": "Pembrolizumab vs Nivolumab by phase",
     "encoding": {
       "x": {
         "field": "category",
@@ -434,40 +434,40 @@
         "type": "quantitative"
       },
       "series": [
-        "Pembrolizumab",
-        "Nivolumab"
+        "pembro",
+        "nivo"
       ]
     },
     "data": [
       {
         "category": "EARLY_PHASE1",
-        "Pembrolizumab": 1,
-        "Nivolumab": 4
+        "pembro": 4,
+        "nivo": 5
       },
       {
         "category": "PHASE1",
-        "Pembrolizumab": 48,
-        "Nivolumab": 50
+        "pembro": 102,
+        "nivo": 110
       },
       {
         "category": "PHASE2",
-        "Pembrolizumab": 94,
-        "Nivolumab": 87
+        "pembro": 180,
+        "nivo": 183
       },
       {
         "category": "PHASE3",
-        "Pembrolizumab": 21,
-        "Nivolumab": 13
+        "pembro": 44,
+        "nivo": 26
       },
       {
         "category": "PHASE4",
-        "Pembrolizumab": 1,
-        "Nivolumab": 0
+        "pembro": 1,
+        "nivo": 1
       },
       {
         "category": "NA",
-        "Pembrolizumab": 13,
-        "Nivolumab": 21
+        "pembro": 21,
+        "nivo": 38
       }
     ]
   },
@@ -475,20 +475,29 @@
     "filters": {},
     "analysis_type": "comparison",
     "source": "clinicaltrials.gov",
-    "study_count": 300,
+    "study_count": 600,
     "capped": true,
     "notes": [
-      "결과가 상한(MAX_STUDIES)에 걸려 최근/상위 일부 study만 집계했습니다. 수치는 전체가 아닌 표본 기준입니다."
+      "'pembro' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다.",
+      "'nivo' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다."
     ]
   },
   "citations": {
-    "Pembrolizumab|EARLY_PHASE1": [
+    "pembro|EARLY_PHASE1": [
       {
         "nct_id": "NCT06366451",
         "excerpt": "PBI-MST-01 (NCT04541108) Substudy AZN-05: Intratumoral Microdosing of Rilvegostomig, Volrustomig, Sabestomig, and AZD9592 in HNSCC"
+      },
+      {
+        "nct_id": "NCT06204614",
+        "excerpt": "Drug Screening Using IMD in Bladder Cancer"
+      },
+      {
+        "nct_id": "NCT04581382",
+        "excerpt": "Radiation Therapy, Plasma Exchange, and Immunotherapy (Pembrolizumab or Nivolumab) for the Treatment of Melanoma"
       }
     ],
-    "Nivolumab|EARLY_PHASE1": [
+    "nivo|EARLY_PHASE1": [
       {
         "nct_id": "NCT05704933",
         "excerpt": "Pilot Study of Nivolumab w/Ipilimumab or Relatlimab in Surgically Resectable Melanoma Brain Metastases"
@@ -502,7 +511,7 @@
         "excerpt": "Drug Screening Using IMD in Bladder Cancer"
       }
     ],
-    "Pembrolizumab|PHASE1": [
+    "pembro|PHASE1": [
       {
         "nct_id": "NCT04454528",
         "excerpt": "BreastVAX: Radiation Boost to Enhance Immune Checkpoint Blockade Therapy"
@@ -516,7 +525,7 @@
         "excerpt": "Study to Evaluate the Safety and Preliminary Efficacy of Ibrutinib and Pembrolizumab in Patients With Chronic Lymphocytic Leukemia (CLL) or Mantle Cell Lymphoma (MCL)"
       }
     ],
-    "Nivolumab|PHASE1": [
+    "nivo|PHASE1": [
       {
         "nct_id": "NCT01024231",
         "excerpt": "Dose-escalation Study of Combination BMS-936558 (MDX-1106) and Ipilimumab in Subjects With Unresectable Stage III or Stage IV Malignant Melanoma"
@@ -530,7 +539,7 @@
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "Pembrolizumab|PHASE2": [
+    "pembro|PHASE2": [
       {
         "nct_id": "NCT05578222",
         "excerpt": "Pembrolizumab as First-line Treatment for Advanced NSCLC Complicated With COPD"
@@ -544,7 +553,7 @@
         "excerpt": "Pembrolizumab and Enobosarm in Treating Patients With Androgen Receptor Positive Metastatic Triple Negative Breast Cancer"
       }
     ],
-    "Nivolumab|PHASE2": [
+    "nivo|PHASE2": [
       {
         "nct_id": "NCT06715241",
         "excerpt": "A MULTICENTER, SEEKING SIGNAL, RANDOMISED, OPEN-LABEL PHASE II OF RELATLIMAB AND NIVOLUMAB VS NIVOLUMAB ALONE IN LOCALLY ADVANCED CERVICAL CANCERS"
@@ -558,7 +567,7 @@
         "excerpt": "High Dose IL-2 in Combination With Anti-PD-1 to Overcome Anti-PD-1 Resistance in Metastatic Melanoma and Renal Cell Carcinoma"
       }
     ],
-    "Pembrolizumab|PHASE3": [
+    "pembro|PHASE3": [
       {
         "nct_id": "NCT04222972",
         "excerpt": "A Study of Pralsetinib Versus Standard of Care for First-Line Treatment of Advanced Non-Small Cell Lung Cancer (NSCLC)"
@@ -572,7 +581,7 @@
         "excerpt": "Study of TDXd, Chemotherapy, Pembrolizumab, and Trastuzumab in First-Line Metastatic HER2-Positive Gastric or Gastroesophageal Junction Cancer"
       }
     ],
-    "Nivolumab|PHASE3": [
+    "nivo|PHASE3": [
       {
         "nct_id": "NCT02538666",
         "excerpt": "An Investigational Immuno-therapy Study of Nivolumab, or Nivolumab in Combination With Ipilimumab, or Placebo in Patients With Extensive-Stage Disease Small Cell Lung Cancer (ED-SCLC) After Completion of Platinum-based Chemotherapy"
@@ -586,13 +595,19 @@
         "excerpt": "Sonesitatug Vedotin in Combination With Capecitabine With or Without Rilvegostomig in Participants With Advanced or Metastatic Gastric, Gastroesophageal Junction, or Esophageal Adenocarcinoma Expressing Claudin18.2"
       }
     ],
-    "Pembrolizumab|PHASE4": [
+    "pembro|PHASE4": [
       {
         "nct_id": "NCT03891979",
         "excerpt": "Gut Microbiome Modulation to Enable Efficacy of Checkpoint-based Immunotherapy in Pancreatic Adenocarcinoma"
       }
     ],
-    "Pembrolizumab|NA": [
+    "nivo|PHASE4": [
+      {
+        "nct_id": "NCT02869789",
+        "excerpt": "An Investigational Immuno-therapy Study for Safety of Nivolumab in Combination With Ipilimumab to Treat Advanced Cancers"
+      }
+    ],
+    "pembro|NA": [
       {
         "nct_id": "NCT06197581",
         "excerpt": "Safety Assessment of Concurrent Radiotherapy and Novel Systemic Therapy for Breast Cancer"
@@ -606,7 +621,7 @@
         "excerpt": "International Multicentric Retrospective Study on the Use of EV+P as First-line Therapy in Patients With la/mUC"
       }
     ],
-    "Nivolumab|NA": [
+    "nivo|NA": [
       {
         "nct_id": "NCT07100405",
         "excerpt": "TACE Combined With Anti-PD-1 Antibody in Patients With Advanced Hepatocellular Carcinoma: Study on Efficacy and Immune Microenvironment"
@@ -639,7 +654,7 @@
 {
   "visualization": {
     "type": "bar_chart",
-    "title": "Trials by country for breast cancer",
+    "title": "Recruiting breast cancer trials by country",
     "encoding": {
       "x": {
         "field": "country",
@@ -762,8 +777,8 @@
     "study_count": 300,
     "capped": true,
     "notes": [
-      "국가 57개 중 상위 25개만 표시합니다.",
-      "결과가 상한(MAX_STUDIES)에 걸려 최근/상위 일부 study만 집계했습니다. 수치는 전체가 아닌 표본 기준입니다."
+      "'default' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다.",
+      "국가 57개 중 상위 25개만 표시합니다."
     ]
   },
   "citations": {
@@ -1177,19 +1192,19 @@
           "degree": 5
         },
         {
-          "id": "Bristol-Myers Squibb",
-          "kind": "sponsor",
-          "degree": 4
-        },
-        {
           "id": "City of Hope Medical Center",
           "kind": "sponsor",
           "degree": 4
         },
         {
-          "id": "Aldesleukin",
+          "id": "Bristol-Myers Squibb",
+          "kind": "sponsor",
+          "degree": 4
+        },
+        {
+          "id": "Ipilimumab",
           "kind": "drug",
-          "degree": 3
+          "degree": 4
         },
         {
           "id": "therapeutic autologous lymphocytes",
@@ -1202,7 +1217,7 @@
           "degree": 3
         },
         {
-          "id": "Ipilimumab",
+          "id": "Aldesleukin",
           "kind": "drug",
           "degree": 3
         },
@@ -1215,6 +1230,31 @@
           "id": "Vastra Gotaland Region",
           "kind": "sponsor",
           "degree": 3
+        },
+        {
+          "id": "Trametinib Dimethyl Sulfoxide",
+          "kind": "drug",
+          "degree": 2
+        },
+        {
+          "id": "MEK162",
+          "kind": "drug",
+          "degree": 2
+        },
+        {
+          "id": "Diwakar Davar",
+          "kind": "sponsor",
+          "degree": 2
+        },
+        {
+          "id": "Hoffmann-La Roche",
+          "kind": "sponsor",
+          "degree": 2
+        },
+        {
+          "id": "Pfizer",
+          "kind": "sponsor",
+          "degree": 2
         },
         {
           "id": "Pembrolizumab",
@@ -1237,87 +1277,12 @@
           "degree": 2
         },
         {
-          "id": "MEK162",
-          "kind": "drug",
-          "degree": 2
-        },
-        {
-          "id": "Hoffmann-La Roche",
-          "kind": "sponsor",
-          "degree": 2
-        },
-        {
           "id": "Celecoxib",
           "kind": "drug",
           "degree": 2
         },
         {
-          "id": "Diwakar Davar",
-          "kind": "sponsor",
-          "degree": 2
-        },
-        {
-          "id": "Trametinib Dimethyl Sulfoxide",
-          "kind": "drug",
-          "degree": 2
-        },
-        {
-          "id": "Pfizer",
-          "kind": "sponsor",
-          "degree": 2
-        },
-        {
-          "id": "sitravatinib",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "ALT-803",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "fludarabine phosphate",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "ATRA",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "FLX475",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "humanized anti-PD-1 monoclonal antibody toripalimab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "M200 (volociximab) in Combination with Dacarbazine (DTIC)",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Pembrolizumab/Quavonlimab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "nab-paclitaxel",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Recombinant Interferon Alfa 2a",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "cyclophosphamide",
+          "id": "GI-6301",
           "kind": "drug",
           "degree": 1
         },
@@ -1327,7 +1292,17 @@
           "degree": 1
         },
         {
-          "id": "GP100 peptide",
+          "id": "Pembrolizumab/Quavonlimab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "humanized anti-PD-1 monoclonal antibody toripalimab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Nivolumab",
           "kind": "drug",
           "degree": 1
         },
@@ -1337,7 +1312,152 @@
           "degree": 1
         },
         {
+          "id": "cyclophosphamide",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Bevacizumab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "RAPT Therapeutics, Inc.",
+          "kind": "sponsor",
+          "degree": 1
+        },
+        {
+          "id": "Gregory Daniels",
+          "kind": "sponsor",
+          "degree": 1
+        },
+        {
+          "id": "M200 (volociximab) in Combination with Dacarbazine (DTIC)",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "IL-2 and Nivolumab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "ALVAC MART-1 Vaccine",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Vibostolimab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Favezelimab/Pembrolizumab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "sitravatinib",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "tislelizumab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "TKI258",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "IL-2",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "omega-3-acid ethyl esters",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
           "id": "ETBX-011",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "BMS-936558 (MDX1106-04)",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Zimberelimab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "GI-6207",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Therapeutic Tumor Infiltrating Lymphocytes",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "nab-paclitaxel",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "ETBX-061",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "GP100 peptide",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Autologous Tumor Infiltrating Lymphocytes",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Leucovorin",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Novartis Pharmaceuticals",
+          "kind": "sponsor",
+          "degree": 1
+        },
+        {
+          "id": "ETBX-051",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Shanghai Junshi Bioscience Co., Ltd.",
+          "kind": "sponsor",
+          "degree": 1
+        },
+        {
+          "id": "autologous anti-MART-1 F5 T-cell receptor gene-engineered peripheral blood lymphocytes",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Domvanalimab",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "fludarabine phosphate",
           "kind": "drug",
           "degree": 1
         },
@@ -1352,68 +1472,13 @@
           "degree": 1
         },
         {
-          "id": "ALVAC MART-1 Vaccine",
+          "id": "ATRA",
           "kind": "drug",
           "degree": 1
         },
         {
-          "id": "Therapeutic Tumor Infiltrating Lymphocytes",
+          "id": "ALT-803",
           "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "ETBX-061",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "IL-2",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "autologous anti-MART-1 F5 T-cell receptor gene-engineered peripheral blood lymphocytes",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Favezelimab/Pembrolizumab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Temozolomide",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "omega-3-acid ethyl esters",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Autologous Tumor Infiltrating Lymphocytes",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Gregory Daniels",
-          "kind": "sponsor",
-          "degree": 1
-        },
-        {
-          "id": "GI-6207",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Vibostolimab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Shanghai Junshi Bioscience Co., Ltd.",
-          "kind": "sponsor",
           "degree": 1
         },
         {
@@ -1422,32 +1487,7 @@
           "degree": 1
         },
         {
-          "id": "Interleukin-2",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "IL-2 and Nivolumab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Novartis Pharmaceuticals",
-          "kind": "sponsor",
-          "degree": 1
-        },
-        {
-          "id": "Domvanalimab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Capecitabine",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Leucovorin",
+          "id": "Recombinant Interferon Alfa 2a",
           "kind": "drug",
           "degree": 1
         },
@@ -1457,52 +1497,22 @@
           "degree": 1
         },
         {
-          "id": "tislelizumab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "GI-6301",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Nivolumab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "TKI258",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "Zimberelimab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "ETBX-051",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "RAPT Therapeutics, Inc.",
-          "kind": "sponsor",
-          "degree": 1
-        },
-        {
-          "id": "Bevacizumab",
-          "kind": "drug",
-          "degree": 1
-        },
-        {
-          "id": "BMS-936558 (MDX1106-04)",
+          "id": "Interleukin-2",
           "kind": "drug",
           "degree": 1
         },
         {
           "id": "5-fluorouracil",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Capecitabine",
+          "kind": "drug",
+          "degree": 1
+        },
+        {
+          "id": "Temozolomide",
           "kind": "drug",
           "degree": 1
         }
@@ -1525,12 +1535,12 @@
         },
         {
           "source": "Merck Sharp & Dohme LLC",
-          "target": "Pembrolizumab",
+          "target": "Lenvatinib",
           "weight": 2
         },
         {
           "source": "Merck Sharp & Dohme LLC",
-          "target": "Lenvatinib",
+          "target": "Pembrolizumab",
           "weight": 2
         },
         {
@@ -1570,16 +1580,6 @@
         },
         {
           "source": "National Cancer Institute (NCI)",
-          "target": "fludarabine phosphate",
-          "weight": 1
-        },
-        {
-          "source": "National Cancer Institute (NCI)",
-          "target": "aldesleukin",
-          "weight": 1
-        },
-        {
-          "source": "National Cancer Institute (NCI)",
           "target": "ALVAC MART-1 Vaccine",
           "weight": 1
         },
@@ -1594,6 +1594,16 @@
           "weight": 1
         },
         {
+          "source": "National Cancer Institute (NCI)",
+          "target": "aldesleukin",
+          "weight": 1
+        },
+        {
+          "source": "National Cancer Institute (NCI)",
+          "target": "fludarabine phosphate",
+          "weight": 1
+        },
+        {
           "source": "Novartis Pharmaceuticals",
           "target": "TKI258",
           "weight": 1
@@ -1605,12 +1615,12 @@
         },
         {
           "source": "Diwakar Davar",
-          "target": "Domvanalimab",
+          "target": "Zimberelimab",
           "weight": 1
         },
         {
           "source": "Diwakar Davar",
-          "target": "Zimberelimab",
+          "target": "Domvanalimab",
           "weight": 1
         },
         {
@@ -1625,7 +1635,7 @@
         },
         {
           "source": "Merck Sharp & Dohme LLC",
-          "target": "ATRA",
+          "target": "Favezelimab/Pembrolizumab",
           "weight": 1
         },
         {
@@ -1635,12 +1645,7 @@
         },
         {
           "source": "Merck Sharp & Dohme LLC",
-          "target": "Favezelimab/Pembrolizumab",
-          "weight": 1
-        },
-        {
-          "source": "National Cancer Institute (NCI)",
-          "target": "GP100 peptide",
+          "target": "ATRA",
           "weight": 1
         },
         {
@@ -1649,13 +1654,13 @@
           "weight": 1
         },
         {
-          "source": "Shanghai Junshi Bioscience Co., Ltd.",
-          "target": "humanized anti-PD-1 monoclonal antibody toripalimab",
+          "source": "National Cancer Institute (NCI)",
+          "target": "GP100 peptide",
           "weight": 1
         },
         {
-          "source": "Vastra Gotaland Region",
-          "target": "Autologous Tumor Infiltrating Lymphocytes",
+          "source": "Shanghai Junshi Bioscience Co., Ltd.",
+          "target": "humanized anti-PD-1 monoclonal antibody toripalimab",
           "weight": 1
         },
         {
@@ -1669,78 +1674,13 @@
           "weight": 1
         },
         {
+          "source": "Vastra Gotaland Region",
+          "target": "Autologous Tumor Infiltrating Lymphocytes",
+          "weight": 1
+        },
+        {
           "source": "Merck Sharp & Dohme LLC",
           "target": "Temozolomide",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Avelumab",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "ALT-803",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "GI-6207",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "ETBX-011",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Cisplatin",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "GI-6301",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Nivolumab",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "ETBX-051",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "haNK",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Cyclophosphamide",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "ETBX-061",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "nab-paclitaxel",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Bevacizumab",
-          "weight": 1
-        },
-        {
-          "source": "ImmunityBio, Inc.",
-          "target": "Capecitabine",
           "weight": 1
         },
         {
@@ -1750,12 +1690,82 @@
         },
         {
           "source": "ImmunityBio, Inc.",
-          "target": "5-fluorouracil",
+          "target": "Cyclophosphamide",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "haNK",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "ETBX-051",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "Nivolumab",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "Bevacizumab",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "ALT-803",
           "weight": 1
         },
         {
           "source": "ImmunityBio, Inc.",
           "target": "omega-3-acid ethyl esters",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "ETBX-011",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "ETBX-061",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "Avelumab",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "GI-6207",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "5-fluorouracil",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "nab-paclitaxel",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "Capecitabine",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "GI-6301",
+          "weight": 1
+        },
+        {
+          "source": "ImmunityBio, Inc.",
+          "target": "Cisplatin",
           "weight": 1
         },
         {
@@ -1785,17 +1795,7 @@
         },
         {
           "source": "City of Hope Medical Center",
-          "target": "Therapeutic Tumor Infiltrating Lymphocytes",
-          "weight": 1
-        },
-        {
-          "source": "City of Hope Medical Center",
           "target": "Aldesleukin",
-          "weight": 1
-        },
-        {
-          "source": "City of Hope Medical Center",
-          "target": "Fludarabine",
           "weight": 1
         },
         {
@@ -1804,8 +1804,18 @@
           "weight": 1
         },
         {
+          "source": "City of Hope Medical Center",
+          "target": "Therapeutic Tumor Infiltrating Lymphocytes",
+          "weight": 1
+        },
+        {
+          "source": "City of Hope Medical Center",
+          "target": "Fludarabine",
+          "weight": 1
+        },
+        {
           "source": "RAPT Therapeutics, Inc.",
-          "target": "FLX475",
+          "target": "Ipilimumab",
           "weight": 1
         }
       ]
@@ -1820,8 +1830,8 @@
     "study_count": 300,
     "capped": true,
     "notes": [
-      "엣지 441개 중 가중치 상위 60개만 표시합니다(허브 중심 관계망).",
-      "결과가 상한(MAX_STUDIES)에 걸려 최근/상위 일부 study만 집계했습니다. 수치는 전체가 아닌 표본 기준입니다."
+      "'default' 검색이 상한(MAX_STUDIES=300)에 걸려 상위 일부만 집계합니다.",
+      "엣지 441개 중 가중치 상위 60개만 표시합니다(허브 중심 관계망)."
     ]
   },
   "citations": {
@@ -1867,7 +1877,7 @@
         "excerpt": "Laboratory-Treated T Cells and Aldesleukin After Cyclophosphamide in Treating Patients With Stage IV Melanoma"
       }
     ],
-    "Merck Sharp & Dohme LLC|Pembrolizumab": [
+    "Merck Sharp & Dohme LLC|Lenvatinib": [
       {
         "nct_id": "NCT04305054",
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
@@ -1877,7 +1887,7 @@
         "excerpt": "Safety and Efficacy Study of Pembrolizumab (MK-3475) Combined With Lenvatinib (MK-7902/E7080) as First-line Intervention in Adults With Advance Melanoma (MK-7902-003/E7080-G000-312/LEAP-003)"
       }
     ],
-    "Merck Sharp & Dohme LLC|Lenvatinib": [
+    "Merck Sharp & Dohme LLC|Pembrolizumab": [
       {
         "nct_id": "NCT04305054",
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
@@ -1957,18 +1967,6 @@
         "excerpt": "Testing Two Different Treatment Schedules of Dabrafenib and Trametinib for Skin Cancer Which Has Spread"
       }
     ],
-    "National Cancer Institute (NCI)|fludarabine phosphate": [
-      {
-        "nct_id": "NCT00612222",
-        "excerpt": "Anti-MART-1 F5 Cells Plus ALVAC MART-1 Vaccine to Treat Advanced Melanoma"
-      }
-    ],
-    "National Cancer Institute (NCI)|aldesleukin": [
-      {
-        "nct_id": "NCT00612222",
-        "excerpt": "Anti-MART-1 F5 Cells Plus ALVAC MART-1 Vaccine to Treat Advanced Melanoma"
-      }
-    ],
     "National Cancer Institute (NCI)|ALVAC MART-1 Vaccine": [
       {
         "nct_id": "NCT00612222",
@@ -1987,6 +1985,18 @@
         "excerpt": "Anti-MART-1 F5 Cells Plus ALVAC MART-1 Vaccine to Treat Advanced Melanoma"
       }
     ],
+    "National Cancer Institute (NCI)|aldesleukin": [
+      {
+        "nct_id": "NCT00612222",
+        "excerpt": "Anti-MART-1 F5 Cells Plus ALVAC MART-1 Vaccine to Treat Advanced Melanoma"
+      }
+    ],
+    "National Cancer Institute (NCI)|fludarabine phosphate": [
+      {
+        "nct_id": "NCT00612222",
+        "excerpt": "Anti-MART-1 F5 Cells Plus ALVAC MART-1 Vaccine to Treat Advanced Melanoma"
+      }
+    ],
     "Novartis Pharmaceuticals|TKI258": [
       {
         "nct_id": "NCT00303251",
@@ -1999,13 +2009,13 @@
         "excerpt": "Dose-escalation Study of Combination BMS-936558 (MDX-1106) and Ipilimumab in Subjects With Unresectable Stage III or Stage IV Malignant Melanoma"
       }
     ],
-    "Diwakar Davar|Domvanalimab": [
+    "Diwakar Davar|Zimberelimab": [
       {
         "nct_id": "NCT05130177",
         "excerpt": "Zimberelimab (AB122) With TIGIT Inhibitor Domvanalimab (AB154) in PD-1 Relapsed/Refractory Melanoma"
       }
     ],
-    "Diwakar Davar|Zimberelimab": [
+    "Diwakar Davar|Domvanalimab": [
       {
         "nct_id": "NCT05130177",
         "excerpt": "Zimberelimab (AB122) With TIGIT Inhibitor Domvanalimab (AB154) in PD-1 Relapsed/Refractory Melanoma"
@@ -2023,7 +2033,7 @@
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
       }
     ],
-    "Merck Sharp & Dohme LLC|ATRA": [
+    "Merck Sharp & Dohme LLC|Favezelimab/Pembrolizumab": [
       {
         "nct_id": "NCT04305054",
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
@@ -2035,19 +2045,19 @@
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
       }
     ],
-    "Merck Sharp & Dohme LLC|Favezelimab/Pembrolizumab": [
+    "Merck Sharp & Dohme LLC|ATRA": [
       {
         "nct_id": "NCT04305054",
         "excerpt": "Substudy 02B: Safety and Efficacy of Pembrolizumab in Combination With Investigational Agents or Pembrolizumab Alone in Participants With First Line (1L) Advanced Melanoma (MK-3475-02B/KEYMAKER-U02)"
       }
     ],
-    "National Cancer Institute (NCI)|GP100 peptide": [
+    "National Cancer Institute (NCI)|IL-2": [
       {
         "nct_id": "NCT00001705",
         "excerpt": "Immunization of Patients With Metastatic Melanoma Using the GP100 Peptide Preceded by an Endoplasmic Reticulum Insertion Signal Sequence"
       }
     ],
-    "National Cancer Institute (NCI)|IL-2": [
+    "National Cancer Institute (NCI)|GP100 peptide": [
       {
         "nct_id": "NCT00001705",
         "excerpt": "Immunization of Patients With Metastatic Melanoma Using the GP100 Peptide Preceded by an Endoplasmic Reticulum Insertion Signal Sequence"
@@ -2057,12 +2067,6 @@
       {
         "nct_id": "NCT03013101",
         "excerpt": "Safety and Efficacy of Recombinant Humanized Anti-PD-1 mAb for Patients With Locally Advanced or Metastatic Melanoma"
-      }
-    ],
-    "Vastra Gotaland Region|Autologous Tumor Infiltrating Lymphocytes": [
-      {
-        "nct_id": "NCT04812470",
-        "excerpt": "Hepatic Arterial Infusion of Autologous Tumor Infiltrating Lymphocytes in Patients With Melanoma and Liver Metastases"
       }
     ],
     "Vastra Gotaland Region|Melphalan": [
@@ -2077,61 +2081,19 @@
         "excerpt": "Hepatic Arterial Infusion of Autologous Tumor Infiltrating Lymphocytes in Patients With Melanoma and Liver Metastases"
       }
     ],
+    "Vastra Gotaland Region|Autologous Tumor Infiltrating Lymphocytes": [
+      {
+        "nct_id": "NCT04812470",
+        "excerpt": "Hepatic Arterial Infusion of Autologous Tumor Infiltrating Lymphocytes in Patients With Melanoma and Liver Metastases"
+      }
+    ],
     "Merck Sharp & Dohme LLC|Temozolomide": [
       {
         "nct_id": "NCT00831545",
         "excerpt": "Study to Evaluate the Efficacy and Safety of Temozolomide in Subjects With Brain Metastases of Either Malignant Melanoma, Breast, or Non-small Cell Lung Cancer (P02064)"
       }
     ],
-    "ImmunityBio, Inc.|Avelumab": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|ALT-803": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|GI-6207": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|ETBX-011": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|Cisplatin": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|GI-6301": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|Nivolumab": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|ETBX-051": [
-      {
-        "nct_id": "NCT03167177",
-        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
-      }
-    ],
-    "ImmunityBio, Inc.|haNK": [
+    "ImmunityBio, Inc.|Leucovorin": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
@@ -2143,13 +2105,19 @@
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "ImmunityBio, Inc.|ETBX-061": [
+    "ImmunityBio, Inc.|haNK": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "ImmunityBio, Inc.|nab-paclitaxel": [
+    "ImmunityBio, Inc.|ETBX-051": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|Nivolumab": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
@@ -2161,13 +2129,37 @@
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "ImmunityBio, Inc.|Capecitabine": [
+    "ImmunityBio, Inc.|ALT-803": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "ImmunityBio, Inc.|Leucovorin": [
+    "ImmunityBio, Inc.|omega-3-acid ethyl esters": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|ETBX-011": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|ETBX-061": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|Avelumab": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|GI-6207": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
@@ -2179,7 +2171,25 @@
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
       }
     ],
-    "ImmunityBio, Inc.|omega-3-acid ethyl esters": [
+    "ImmunityBio, Inc.|nab-paclitaxel": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|Capecitabine": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|GI-6301": [
+      {
+        "nct_id": "NCT03167177",
+        "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
+      }
+    ],
+    "ImmunityBio, Inc.|Cisplatin": [
       {
         "nct_id": "NCT03167177",
         "excerpt": "QUILT-3.046: NANT Melanoma Vaccine: Combination Immunotherapy in Subjects With Melanoma Who Have Progressed On or After Chemotherapy and PD-1/PD-L1 Therapy"
@@ -2215,19 +2225,7 @@
         "excerpt": "Volociximab in Combination With DTIC in Patients With Metastatic Melanoma Not Previously Treated With Chemotherapy"
       }
     ],
-    "City of Hope Medical Center|Therapeutic Tumor Infiltrating Lymphocytes": [
-      {
-        "nct_id": "NCT06626256",
-        "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
-      }
-    ],
     "City of Hope Medical Center|Aldesleukin": [
-      {
-        "nct_id": "NCT06626256",
-        "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
-      }
-    ],
-    "City of Hope Medical Center|Fludarabine": [
       {
         "nct_id": "NCT06626256",
         "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
@@ -2239,7 +2237,19 @@
         "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
       }
     ],
-    "RAPT Therapeutics, Inc.|FLX475": [
+    "City of Hope Medical Center|Therapeutic Tumor Infiltrating Lymphocytes": [
+      {
+        "nct_id": "NCT06626256",
+        "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
+      }
+    ],
+    "City of Hope Medical Center|Fludarabine": [
+      {
+        "nct_id": "NCT06626256",
+        "excerpt": "STIL101 for Injection for the Treatment of Locally Advanced, Metastatic or Unresectable Pancreatic Cancer, Colorectal Cancer, Renal Cell Cancer, Cervical Cancer and Melanoma"
+      }
+    ],
+    "RAPT Therapeutics, Inc.|Ipilimumab": [
       {
         "nct_id": "NCT04894994",
         "excerpt": "FLX475 in Combination With Ipilimumab in Advanced Melanoma"
@@ -2263,13 +2273,13 @@
 {
   "visualization": {
     "type": "no_data",
-    "title": "Trial distribution by phase for Zzzznonexistentdrug",
+    "title": "결과 없음",
     "encoding": {},
     "data": []
   },
   "meta": {
     "filters": {},
-    "analysis_type": "distribution",
+    "analysis_type": null,
     "source": "clinicaltrials.gov",
     "study_count": 0,
     "capped": false,

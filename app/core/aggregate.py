@@ -1,19 +1,18 @@
 """집계 함수 — 전부 순수 함수. LLM/네트워크 의존 없음, 오프라인 단위테스트 가능.
 
 각 함수는 다음 형태를 반환한다:
-    {"data": <chart data>, "buckets": {bucket_key: [nct_id, ...]}}
-buckets는 citation 부착(spec_builder)에서 각 데이터 포인트의 근거 study를 찾는 데 쓰인다.
+    {"data": <chart data>, "buckets": {bucket_key: [nct_id, ...]}, "notes": [...]}
+buckets는 citation 부착 시 각 데이터 포인트의 근거 study를 찾는 데 쓰인다.
+
+이 모듈은 오케스트레이션(에이전트/그래프)과 무관한 "계산 코어"다. 에이전트 도구(app/agent/tools.py)가
+이 함수들을 호출하며, 모든 수치는 여기서 결정론적으로 계산된다(LLM이 숫자를 만들 경로 없음).
 """
 
 from collections import Counter, defaultdict
 
-from app.graph import extractors as ex
-from app.graph.state import GraphState
+from app.core import extractors as ex
 
 PHASE_ORDER = ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]
-
-
-# ---------- 개별 집계 함수 (라우터가 호출) ----------
 
 
 def aggregate_time_trend(studies: list[dict]) -> dict:
@@ -29,7 +28,7 @@ def aggregate_time_trend(studies: list[dict]) -> dict:
         {"year": int(year), "trial_count": len(ncts)}
         for year, ncts in sorted(buckets.items(), key=lambda kv: int(kv[0]))
     ]
-    return {"data": data, "buckets": dict(buckets)}
+    return {"data": data, "buckets": dict(buckets), "notes": []}
 
 
 def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
@@ -53,7 +52,7 @@ def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
         keys = sorted(buckets, key=lambda k: len(buckets[k]), reverse=True)
 
     data = [{"category": k, "trial_count": len(buckets[k])} for k in keys]
-    return {"data": data, "buckets": dict(buckets)}
+    return {"data": data, "buckets": dict(buckets), "notes": []}
 
 
 def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
@@ -96,13 +95,14 @@ def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
         "data": data,
         "buckets": buckets,
         "group_labels": list(per_group.keys()),
+        "notes": [],
     }
 
 
 def aggregate_geo(studies: list[dict], top_n: int = 25) -> dict:
     """국가별 시험 수. 한 study가 여러 국가를 가지면 각 국가에 study 단위로 1회 카운트.
 
-    가독성/응답 크기를 위해 상위 top_n개 국가만 반환한다(초과 시 meta note로 표기).
+    가독성/응답 크기를 위해 상위 top_n개 국가만 반환한다(초과 시 note로 표기).
     """
     buckets: dict[str, list[str]] = defaultdict(list)
     for s in studies:
@@ -130,7 +130,7 @@ def aggregate_network(
     - drug_drug: 같은 study 내 DRUG intervention 2개 이상 → 모든 쌍을 co-occurrence 엣지로
     엣지에는 weight(공유 study 수)와 근거 nct_id를 담는다. 응답 크기·가독성을 위해 weight
     상위 max_edges개 엣지만 남기고, 남은 엣지에 연결된 노드만 반환한다(degree는 남은 엣지 기준
-    재계산). 초과 시 meta note로 표기한다.
+    재계산). 초과 시 note로 표기한다.
     """
     edge_ncts: dict[tuple[str, str], list[str]] = defaultdict(list)
     node_kind: dict[str, str] = {}
@@ -153,7 +153,6 @@ def aggregate_network(
                 for j in range(i + 1, len(drugs)):
                     edge_ncts[(drugs[i], drugs[j])].append(nct)
 
-    # weight 내림차순 정렬 후 상위 max_edges개만 유지
     sorted_edges = sorted(edge_ncts.items(), key=lambda kv: len(kv[1]), reverse=True)
     notes = []
     if len(sorted_edges) > max_edges:
@@ -180,31 +179,3 @@ def aggregate_network(
     ]
 
     return {"data": {"nodes": nodes, "edges": edges}, "buckets": buckets, "notes": notes}
-
-
-# ---------- LangGraph 노드 래퍼 ----------
-
-
-def aggregate_node(state: GraphState) -> dict:
-    """intent.analysis_type에 따라 알맞은 집계 함수를 호출한다.
-
-    comparison은 그룹별로 studies를 별도 fetch해야 하므로 이 노드가 직접 처리하지 않고
-    build.py의 conditional routing에서 comparison 전용 노드로 분기한다. 여기서는
-    time_trend/distribution/geo/network만 다룬다.
-    """
-    intent = state["intent"]
-    studies = state["studies"]
-    atype = intent.analysis_type
-
-    if atype == "time_trend":
-        result = aggregate_time_trend(studies)
-    elif atype == "distribution":
-        result = aggregate_distribution(studies, intent.distribution_field or "phase")
-    elif atype == "geo":
-        result = aggregate_geo(studies)
-    elif atype == "network":
-        result = aggregate_network(studies, intent.network_dimension or "sponsor_drug")
-    else:
-        result = aggregate_distribution(studies, "phase")
-
-    return {"aggregated": result}

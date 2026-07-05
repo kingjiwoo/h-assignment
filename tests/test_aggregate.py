@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from app.graph.nodes.aggregate import (
+from app.core.aggregate import (
     aggregate_comparison,
     aggregate_distribution,
     aggregate_geo,

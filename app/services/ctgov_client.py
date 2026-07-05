@@ -1,7 +1,7 @@
 """ClinicalTrials.gov v2 Data API에 대한 얇은 HTTP 클라이언트.
 
 서버사이드 group-by가 없으므로, 여기서는 페이지네이션과 payload 최소화(fields 파라미터)만
-책임지고 집계는 app/graph/nodes/aggregate.py가 담당한다.
+책임지고 집계는 app/core/aggregate.py가 담당한다.
 
 NOTE: httpx로 호출 시 CT.gov 엣지(WAF로 추정)에서 일관되게 403이 발생하는 것을 확인했다
 (TLS handshake 지문 차이로 추정 — curl과 requests는 동일 요청이 200을 반환). 원인 분석에

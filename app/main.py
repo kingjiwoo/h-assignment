@@ -4,7 +4,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.graph.build import compiled_graph
+from app.agent.runner import run_agent
 from app.schemas import QueryRequest, QueryResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -27,9 +27,7 @@ def query(req: QueryRequest) -> QueryResponse:
     # 명시적으로 주어진 구조화 필드만 추려 LLM 값보다 우선하도록 전달
     input_filters = req.model_dump(exclude_none=True, exclude={"query"})
 
-    result = compiled_graph.invoke(
-        {"query": req.query, "input_filters": input_filters}
-    )
+    result = run_agent(req.query, input_filters)
 
     return QueryResponse(
         visualization=result["visualization"],
