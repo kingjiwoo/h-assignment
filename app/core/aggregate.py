@@ -28,7 +28,9 @@ def aggregate_time_trend(studies: list[dict]) -> dict:
         {"year": int(year), "trial_count": len(ncts)}
         for year, ncts in sorted(buckets.items(), key=lambda kv: int(kv[0]))
     ]
-    return {"data": data, "buckets": dict(buckets), "notes": []}
+    parsed = sum(len(v) for v in buckets.values())
+    notes = [f"집계 대상 {len(studies)}건 중 StartDate 파싱 가능한 {parsed}건 기준."]
+    return {"data": data, "buckets": dict(buckets), "notes": notes}
 
 
 def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
@@ -52,7 +54,8 @@ def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
         keys = sorted(buckets, key=lambda k: len(buckets[k]), reverse=True)
 
     data = [{"category": k, "trial_count": len(buckets[k])} for k in keys]
-    return {"data": data, "buckets": dict(buckets), "notes": []}
+    notes = [f"집계 대상 {len(studies)}건 (필터 적용 후, field={field})."]
+    return {"data": data, "buckets": dict(buckets), "notes": notes}
 
 
 def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
@@ -91,11 +94,13 @@ def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
             buckets[f"{label}|{cat}"] = cat_buckets.get(cat, [])
         data.append(row)
 
+    totals = ", ".join(f"{g['label']}: {len(g['studies'])}건" for g in groups)
+    notes = [f"집계 대상 — {totals} (field={field})."]
     return {
         "data": data,
         "buckets": buckets,
         "group_labels": list(per_group.keys()),
-        "notes": [],
+        "notes": notes,
     }
 
 

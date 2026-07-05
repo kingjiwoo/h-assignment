@@ -39,6 +39,17 @@ ALLOWED_CHART_TYPES = {
     "no_data",
 }
 
+# artifact.kind 별로 finalize가 허용하는 chart_type 집합.
+# LLM이 잘못된 조합을 확정하려 하면 finalize 도구가 거절(→ LLM 재시도 유도),
+# 만에 하나 통과되어도 assemble_response의 안전벨트가 no_data로 강등한다.
+KIND_TO_CHART: dict[str, set[str]] = {
+    "time_trend":   {"time_series"},
+    "distribution": {"bar_chart"},
+    "comparison":   {"grouped_bar_chart"},
+    "geo":          {"bar_chart"},
+    "network":      {"network_graph"},
+}
+
 
 def make_tools(session: Session, client: CtGovClient | None = None) -> list:
     """주어진 Session에 바인딩된 도구 리스트를 만든다 (요청마다 새로 생성)."""
@@ -247,6 +258,13 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
             return f"허용되지 않은 chart_type '{chart_type}'. 가능: {sorted(ALLOWED_CHART_TYPES)}"
         if artifact_id not in session.artifacts:
             return f"artifact_id='{artifact_id}'를 찾을 수 없습니다. 존재하는: {list(session.artifacts)}"
+        artifact = session.artifacts[artifact_id]
+        allowed = KIND_TO_CHART.get(artifact.kind, set())
+        if chart_type not in allowed:
+            return (
+                f"artifact kind='{artifact.kind}'에는 chart_type={sorted(allowed)}만 가능합니다. "
+                f"'{chart_type}'은(는) 이 kind와 맞지 않으니 규칙에 맞는 chart_type으로 다시 호출하세요."
+            )
         session.final_artifact_id = artifact_id
         session.final_chart_type = chart_type
         session.final_title = title
