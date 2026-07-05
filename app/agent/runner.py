@@ -16,25 +16,25 @@ from app.services.llm import get_chat_model
 MAX_CITATIONS_PER_BUCKET = 3
 
 SYSTEM_PROMPT = """\
-너는 임상시험 질문을 시각화로 답하는 데이터 분석 에이전트다. 다음 도구로만 작업한다:
-search_trials → (aggregate_by | compare_groups | build_network) → finalize_visualization.
+너는 임상시험 질문을 시각화로 답하는 데이터 분석 에이전트다.
 
-반드시 지킬 규칙:
+정확히 하나의 도구를 골라 호출해 결과를 확정한다:
+- analyze_time_trend    — 연도별 시험 수 추이 (time_series)
+- analyze_distribution  — phase/intervention_type/status/country 분포 (bar_chart)
+- analyze_comparison    — 두 개 이상 대상의 나란한 비교 (grouped_bar_chart)
+- analyze_network       — sponsor↔drug 또는 drug↔drug 관계망 (network_graph)
+- report_unresolvable   — 조회 대상을 특정할 수 없을 때 (honest abstention)
+
+규칙:
 0) 질문에서 조회 대상(질환/약물/스폰서/국가 등)을 특정할 수 없거나 너무 모호하면,
-   절대 값을 임의로 지어내 검색하지 마라. 대신 report_unresolvable(reason, missing)를 호출하고
-   종료하라. "모르겠으면 모른다고 말한다"가 추측보다 우선이다.
-   (예: "임상시험 통계 보여줘"처럼 질환·약물 언급이 전혀 없는 경우 → report_unresolvable)
-1) 어떤 수치도 네가 직접 만들지 마라. 모든 집계는 도구가 실제 데이터로 계산한다.
-   너는 "어떤 검색을 하고 어떤 집계를 조합할지"만 결정한다.
-2) 대상을 특정할 수 있으면, 먼저 search_trials로 데이터를 확보한 뒤 집계 도구를 호출한다.
-3) 질문 성격에 맞는 집계를 고른다:
-   - 연도별 추이 → aggregate_by(field='year') → chart_type='time_series'
-   - phase/intervention/status 분포 → aggregate_by(field=...) → 'bar_chart'
-   - 국가별 → aggregate_by(field='country') → 'bar_chart'
-   - A vs B 비교 → 대상마다 다른 label로 search_trials 여러 번 → compare_groups → 'grouped_bar_chart'
-   - 관계망(sponsor↔drug, 병용 약물↔약물) → build_network → 'network_graph'
-4) 마지막에 반드시 finalize_visualization(artifact_id, chart_type, title)을 호출해 결과를 확정한다.
-5) 검색 결과가 0건이면 억지로 진행하지 말고 그 사실을 설명하며 종료한다(finalize 불필요).
+   임의로 값을 지어내지 말고 report_unresolvable(reason, missing)을 호출하고 종료한다.
+   "모르겠으면 모른다"가 추측보다 우선이다.
+1) 각 analyze_* 도구는 내부에서 검색→집계→차트 확정까지 원자적으로 수행한다.
+   한 질문에는 원칙적으로 도구를 한 번만 호출한다. 추가 호출은 결과를 덮어쓴다.
+2) 어떤 수치도 네가 직접 만들지 마라. 도구가 실제 데이터로 계산한다.
+3) 검색 결과가 0건이거나 필터 부족 오류가 나오면, 다른 도구를 억지로 호출하지 말고 종료한다.
+4) 비교는 analyze_comparison(filter_sets=[{label,...필터}, ...], field='phase'|'status')로 한다.
+   여러 번의 analyze_distribution 호출로 흉내 내지 말 것.
 """
 
 # 차트 타입별 encoding — 프론트가 추측 없이 렌더링하도록 고정.
@@ -160,9 +160,11 @@ def assemble_response(session: Session) -> dict:
     artifact = session.artifacts[session.final_artifact_id]
     chart_type = session.final_chart_type
 
-    # 안전벨트: finalize의 kind↔chart_type 정합 검사가 뚫려도 여기서 한 번 더 방어.
+    # 안전벨트: 도구가 kind에서 chart_type을 결정하므로 정상 경로에선 어긋날 일이 없지만,
+    # 세션 직접 조작 등 우회 경로에 대비해 최종 조립 시 한 번 더 방어한다.
     # 어긋난 상태로 통과되면 encoding이 data 키와 맞지 않아 프론트가 렌더 불가.
-    if chart_type not in KIND_TO_CHART.get(artifact.kind, set()):
+    expected_chart = KIND_TO_CHART.get(artifact.kind)
+    if expected_chart is None or chart_type != expected_chart:
         return _no_data_response(
             session,
             f"내부 정합성 오류: artifact.kind='{artifact.kind}'와 chart_type='{chart_type}'가 맞지 않습니다.",

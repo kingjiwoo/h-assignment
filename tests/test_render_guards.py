@@ -1,9 +1,9 @@
 """그래프 출력 검증 계층 단위 테스트 — LLM/네트워크 없이 오프라인 검증.
 
-세 계층을 함께 확인한다:
-- 안(tool): finalize_visualization의 kind↔chart_type 정합 검사 (B)
-- 밖(assemble): 빈 data → no_data 강등 (C), 안전벨트 kind↔chart_type 재검사
-- aggregate 표본 크기 정직성 노트 (H)
+- B (kind↔chart_type 정합): 통합 도구가 kind에서 chart_type을 결정론적으로 확정하므로
+  LLM 경로로는 어긋날 수 없다. 세션 직접 조작에 대한 안전벨트 테스트만 유지.
+- C (assemble_response의 빈 data → no_data 강등)
+- H (aggregate 표본 크기 정직성 노트)
 """
 
 import json
@@ -37,52 +37,37 @@ def _tools(session, studies=FIXTURE):
 
 
 # ============================================================================
-# B — finalize_visualization의 kind↔chart_type 정합 검사 (도구 내부)
+# B — 통합 도구는 kind에서 chart_type을 자동 결정한다 (LLM이 뒤바꿀 통로 없음)
 # ============================================================================
 
 
-def test_B_finalize_rejects_network_with_bar_chart():
-    """network artifact를 bar_chart로 확정하려 하면 에러 문자열 반환, 세션 상태 미변경."""
+def test_B_analyze_network_locks_chart_to_network_graph():
+    """analyze_network는 항상 kind=network, chart_type=network_graph를 확정한다."""
     s = Session(input_filters={})
     t = _tools(s)
-    t["search_trials"].invoke({"condition": "diabetes"})
-    t["build_network"].invoke({"dimension": "sponsor_drug"})
-    # 잘못된 조합 시도
-    out = t["finalize_visualization"].invoke(
-        {"artifact_id": "network_1", "chart_type": "bar_chart", "title": "wrong"}
+    t["analyze_network"].invoke(
+        {"dimension": "sponsor_drug", "title": "n", "condition": "diabetes"}
     )
-    assert "kind='network'" in out
-    assert "network_graph" in out  # 어떤 것이 가능한지 안내
-    # 세션은 아직 확정 안 됨 → LLM이 다시 시도할 여지
-    assert s.final_artifact_id is None
-    assert s.final_chart_type is None
+    assert s.final_chart_type == "network_graph"
+    assert s.artifacts[s.final_artifact_id].kind == "network"
 
 
-def test_B_finalize_rejects_distribution_with_grouped_bar():
-    """distribution artifact를 grouped_bar_chart로 확정 시도 → 거절."""
+def test_B_analyze_distribution_locks_chart_to_bar_chart():
     s = Session(input_filters={})
     t = _tools(s)
-    t["search_trials"].invoke({"condition": "diabetes"})
-    t["aggregate_by"].invoke({"field": "phase"})
-    out = t["finalize_visualization"].invoke(
-        {"artifact_id": "distribution_1", "chart_type": "grouped_bar_chart", "title": "wrong"}
+    t["analyze_distribution"].invoke(
+        {"field": "phase", "title": "d", "condition": "diabetes"}
     )
-    assert "kind='distribution'" in out
-    assert s.final_artifact_id is None
+    assert s.final_chart_type == "bar_chart"
+    assert s.artifacts[s.final_artifact_id].kind == "distribution"
 
 
-def test_B_finalize_accepts_matching_pair():
-    """올바른 kind↔chart_type 쌍은 정상 확정."""
+def test_B_analyze_time_trend_locks_chart_to_time_series():
     s = Session(input_filters={})
     t = _tools(s)
-    t["search_trials"].invoke({"condition": "diabetes"})
-    t["aggregate_by"].invoke({"field": "year"})
-    out = t["finalize_visualization"].invoke(
-        {"artifact_id": "time_trend_1", "chart_type": "time_series", "title": "yearly"}
-    )
-    assert "확정 완료" in out
-    assert s.final_artifact_id == "time_trend_1"
+    t["analyze_time_trend"].invoke({"title": "y", "condition": "diabetes"})
     assert s.final_chart_type == "time_series"
+    assert s.artifacts[s.final_artifact_id].kind == "time_trend"
 
 
 # ============================================================================
@@ -134,12 +119,12 @@ def test_C_empty_network_data_downgrades_to_no_data():
 
 
 # ============================================================================
-# 안전벨트 — assemble_response의 kind↔chart_type 재검사 (조립 단계, B 백스톱)
+# 안전벨트 — assemble_response의 kind↔chart_type 재검사 (세션 조작 우회 방어)
 # ============================================================================
 
 
 def test_safety_belt_downgrades_kind_chart_mismatch():
-    """B가 뚫려 network artifact + bar_chart가 세션에 남아있어도 최종 응답에서 no_data 강등."""
+    """세션에 network artifact + bar_chart가 강제로 남아있어도 최종 응답에서 no_data 강등."""
     s = Session(input_filters={})
     s.searches["default"] = SearchResult(label="default", studies=[{"_": 1}], capped=False, filters={})
     s.artifacts["network_1"] = Artifact(
@@ -150,7 +135,7 @@ def test_safety_belt_downgrades_kind_chart_mismatch():
         notes=[],
         extra={},
     )
-    # 정합 검사 우회 시나리오를 시뮬레이션 (직접 세션에 쓰는 극단 케이스)
+    # 정상 경로에선 도구가 chart_type을 자동 결정하지만, 우회를 시뮬레이션.
     s.final_artifact_id = "network_1"
     s.final_chart_type = "bar_chart"
     s.final_title = "should be downgraded"

@@ -1,13 +1,13 @@
-"""에이전트 도구 세트.
+"""에이전트 도구 세트 (통합판).
 
-설계 핵심:
-- 도구는 모든 수치를 결정론적 코어(app/core)로 계산하고 결과를 Session에 저장한다.
-- LLM에는 요약(preview)만 반환한다 → 토큰 절약 + LLM이 원시 숫자를 재생성/전사할 유인 제거.
-- 최종 응답은 finalize가 지목한 artifact를 서버가 Session에서 직접 꺼내 만든다.
+한 도구 = 한 분석 kind = 한 chart_type. 각 도구가 내부에서 검색 → 집계 → 확정을 원자적으로
+수행하고, Session에 완결된 Artifact와 최종 상태(final_*)를 남긴다.
 
-따라서 LLM은 "어떤 검색을 하고 어떤 집계를 조합할지"(오케스트레이션)만 통제하고,
-"숫자가 얼마인지"는 절대 만들지 않는다.
+LLM은 "어떤 분석을 할지"만 결정한다. chart_type을 직접 지정할 통로가 없어 kind↔chart_type
+정합성 오류가 원천 차단되며, 모든 수치는 결정론적 코어(app/core)가 실제 데이터로 계산한다.
 """
+
+from concurrent.futures import ThreadPoolExecutor
 
 from langchain_core.tools import tool
 
@@ -23,41 +23,87 @@ from app.core.query import build_ctgov_params
 from app.agent.session import Artifact, SearchResult, Session
 from app.services.ctgov_client import CtGovClient
 
-FIELD_TO_KIND = {
-    "year": "time_trend",
-    "phase": "distribution",
-    "intervention_type": "distribution",
-    "status": "distribution",
-    "country": "geo",
+# 각 분석 kind가 확정하는 chart_type — 1:1 결정론 매핑.
+# assemble_response의 안전벨트가 이 표를 재확인해 세션 조작 등의 우회 경로도 방어한다.
+KIND_TO_CHART: dict[str, str] = {
+    "time_trend": "time_series",
+    "distribution": "bar_chart",
+    "geo": "bar_chart",
+    "comparison": "grouped_bar_chart",
+    "network": "network_graph",
 }
 
-ALLOWED_CHART_TYPES = {
-    "time_series",
-    "bar_chart",
-    "grouped_bar_chart",
-    "network_graph",
-    "no_data",
-}
+DISTRIBUTION_FIELDS = {"phase", "intervention_type", "status"}
+COMPARISON_FIELDS = {"phase", "status"}
+NETWORK_DIMENSIONS = {"sponsor_drug", "drug_drug"}
 
-# artifact.kind 별로 finalize가 허용하는 chart_type 집합.
-# LLM이 잘못된 조합을 확정하려 하면 finalize 도구가 거절(→ LLM 재시도 유도),
-# 만에 하나 통과되어도 assemble_response의 안전벨트가 no_data로 강등한다.
-KIND_TO_CHART: dict[str, set[str]] = {
-    "time_trend":   {"time_series"},
-    "distribution": {"bar_chart"},
-    "comparison":   {"grouped_bar_chart"},
-    "geo":          {"bar_chart"},
-    "network":      {"network_graph"},
-}
+
+def _merged_filters(session_filters: dict, tool_args: dict) -> dict:
+    """요청에 명시된 필터는 LLM 인자보다 항상 우선한다(결정론적 보증)."""
+    merged = dict(tool_args)
+    for k, v in session_filters.items():
+        if k in merged and v not in (None, ""):
+            merged[k] = v
+    return merged
 
 
 def make_tools(session: Session, client: CtGovClient | None = None) -> list:
-    """주어진 Session에 바인딩된 도구 리스트를 만든다 (요청마다 새로 생성)."""
+    """Session에 바인딩된 도구 리스트를 만든다 (요청마다 새로 생성)."""
     client = client or CtGovClient()
 
+    # 요청 내 필터 조합별 CT.gov 응답 캐시.
+    # 같은 필터로 여러 분석(예: 비교 시 A/B가 공통 필터를 공유)이 돌아도 API 호출은 1회.
+    fetch_cache: dict[frozenset, tuple[list, bool]] = {}
+
+    def _fetch(filter_kwargs: dict) -> tuple[list, bool, dict, dict]:
+        """필터로 검색(캐시 재사용)하여 (studies, capped, ctgov_params, effective_filters)를 반환."""
+        merged = _merged_filters(session.input_filters, filter_kwargs)
+        effective = {k: v for k, v in merged.items() if v not in (None, "")}
+        params = build_ctgov_params(**merged)
+        if not params:
+            return [], False, {}, effective
+        key = frozenset(effective.items())
+        if key in fetch_cache:
+            studies, capped = fetch_cache[key]
+        else:
+            studies, capped = client.search_studies(params, max_studies=settings.max_studies)
+            fetch_cache[key] = (studies, capped)
+        return studies, capped, params, effective
+
+    def _record_search(label: str, studies: list, capped: bool, effective_filters: dict) -> None:
+        session.searches[label] = SearchResult(
+            label=label, studies=studies, capped=capped, filters=effective_filters
+        )
+        session.index_studies(studies)
+        if capped:
+            note = f"'{label}' 검색이 상한(MAX_STUDIES={settings.max_studies})에 걸려 상위 일부만 집계합니다."
+            if note not in session.notes:
+                session.notes.append(note)
+
+    def _finalize(kind: str, result: dict, title: str, extra: dict | None = None) -> str:
+        aid = session.next_artifact_id(kind)
+        session.artifacts[aid] = Artifact(
+            artifact_id=aid,
+            kind=kind,
+            data=result["data"],
+            buckets=result["buckets"],
+            notes=result.get("notes", []),
+            extra=extra or {},
+        )
+        session.final_artifact_id = aid
+        session.final_chart_type = KIND_TO_CHART[kind]
+        session.final_title = title
+        return aid
+
+    _NO_FILTERS_MSG = (
+        "필터가 비어 있어 CT.gov 검색을 구성할 수 없습니다. "
+        "drug_name/condition/sponsor/country 중 하나 이상을 지정하거나, "
+        "질문에서 그 정보를 특정할 수 없다면 report_unresolvable을 호출하세요."
+    )
+
     @tool
-    def search_trials(
-        label: str = "default",
+    def analyze_time_trend(
+        title: str,
         drug_name: str | None = None,
         condition: str | None = None,
         sponsor: str | None = None,
@@ -67,208 +113,176 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         end_year: int | None = None,
         overall_status: str | None = None,
     ) -> str:
-        """ClinicalTrials.gov에서 조건에 맞는 임상시험을 검색해 결과 집합을 label로 저장한다.
-
-        비교(comparison) 질문은 대상마다 label을 다르게 주어 여러 번 호출하라
-        (예: label='drugA' 로 한 번, label='drugB' 로 한 번). 이후 집계 도구에서 이 label을 참조한다.
+        """연도별 시험 수 추이(time_series)를 계산·확정한다.
 
         Args:
-            label: 이 검색 결과를 가리킬 이름. 단일 질문이면 'default'.
-            drug_name: 약물/중재명 (브랜드명·동의어 가능).
-            condition: 질환명.
-            sponsor: 스폰서명.
-            country: 국가명.
-            trial_phase: PHASE1/PHASE2/PHASE3/PHASE4/EARLY_PHASE1/NA 중 하나.
-            start_year: 시작 연도 하한.
-            end_year: 시작 연도 상한.
-            overall_status: RECRUITING/COMPLETED 등 모집 상태.
+            title: 사람이 읽을 수 있는 차트 제목.
+            drug_name/condition/sponsor/country/trial_phase/start_year/end_year/overall_status:
+                CT.gov 검색 필터. 최소 하나 이상 필요.
         Returns:
-            검색된 시험 수와 cap 여부 요약.
+            확정 요약 (artifact_id, 데이터 포인트 수, 검색 규모).
         """
-        # 요청에 명시된 필터는 LLM 인자보다 항상 우선한다(결정론적 보증).
-        merged = {
-            "drug_name": drug_name,
-            "condition": condition,
-            "sponsor": sponsor,
-            "country": country,
-            "trial_phase": trial_phase,
-            "start_year": start_year,
-            "end_year": end_year,
+        filter_kwargs = {
+            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
+            "country": country, "trial_phase": trial_phase,
+            "start_year": start_year, "end_year": end_year,
             "overall_status": overall_status,
         }
-        for k, v in session.input_filters.items():
-            if k in merged and v not in (None, ""):
-                merged[k] = v
-
-        params = build_ctgov_params(**merged)
+        studies, capped, params, effective = _fetch(filter_kwargs)
         if not params:
-            return "검색 필터가 비어 있습니다. 최소 하나의 조건(drug_name/condition/sponsor 등)을 지정하세요."
-
-        studies, capped = client.search_studies(params, max_studies=settings.max_studies)
-        session.searches[label] = SearchResult(
-            label=label, studies=studies, capped=capped, filters={k: v for k, v in merged.items() if v}
-        )
-        session.index_studies(studies)
-        if capped:
-            session.notes.append(
-                f"'{label}' 검색이 상한(MAX_STUDIES={settings.max_studies})에 걸려 상위 일부만 집계합니다."
-            )
+            return _NO_FILTERS_MSG
+        _record_search("default", studies, capped, effective)
+        if not studies:
+            return f"조건에 맞는 시험이 0건입니다 (filters={effective}). 시각화를 확정하지 않습니다."
+        result = aggregate_time_trend(studies)
+        aid = _finalize("time_trend", result, title)
         return (
-            f"label='{label}' 검색 완료: {len(studies)}건"
-            f"{' (cap 도달, 표본 기준)' if capped else ''}. "
-            f"적용 필터: {session.searches[label].filters}"
+            f"time_series 확정: artifact_id='{aid}', 연도 {len(result['data'])}개, "
+            f"검색 {len(studies)}건{' (cap 도달)' if capped else ''}."
         )
-
-    def _preview_rows(data: list[dict], key_fields: list[str], n: int = 8) -> str:
-        rows = []
-        for row in data[:n]:
-            rows.append(", ".join(f"{k}={row.get(k)}" for k in key_fields))
-        more = f" ... (+{len(data) - n} more)" if len(data) > n else ""
-        return "; ".join(rows) + more
 
     @tool
-    def aggregate_by(field: str, search_label: str = "default") -> str:
-        """저장된 검색 결과를 특정 축으로 group-by 집계한다 (모든 수치는 서버가 계산).
+    def analyze_distribution(
+        field: str,
+        title: str,
+        drug_name: str | None = None,
+        condition: str | None = None,
+        sponsor: str | None = None,
+        country: str | None = None,
+        trial_phase: str | None = None,
+        start_year: int | None = None,
+        end_year: int | None = None,
+        overall_status: str | None = None,
+    ) -> str:
+        """카테고리 분포(bar_chart)를 계산·확정한다.
 
         Args:
-            field: 집계 축. 다음 중 하나 —
-                'year'(연도별 추이), 'phase'(임상 단계 분포),
-                'intervention_type'(중재 유형 분포), 'status'(모집 상태 분포),
-                'country'(국가별 분포).
-            search_label: 어떤 검색 결과를 집계할지. 기본 'default'.
-        Returns:
-            생성된 artifact_id와 상위 데이터 미리보기. 이 artifact_id를 finalize에 넘겨라.
+            field: 'phase' | 'intervention_type' | 'status' | 'country'.
+                'country'는 국가별 시험 수 지리 분포로 처리된다.
+            title: 차트 제목.
+            (나머지 검색 필터는 analyze_time_trend와 동일)
         """
-        if field not in FIELD_TO_KIND:
-            return f"지원하지 않는 field '{field}'. 가능: {sorted(FIELD_TO_KIND)}"
-        sr = session.searches.get(search_label)
-        if sr is None:
-            return f"search_label='{search_label}' 결과가 없습니다. 먼저 search_trials를 호출하세요."
-        if not sr.studies:
-            return f"'{search_label}' 검색 결과가 0건이라 집계할 수 없습니다."
-
-        if field == "year":
-            result = aggregate_time_trend(sr.studies)
-            key_fields = ["year", "trial_count"]
-        elif field == "country":
-            result = aggregate_geo(sr.studies)
-            key_fields = ["country", "trial_count"]
+        if field != "country" and field not in DISTRIBUTION_FIELDS:
+            return f"field='{field}' 미지원. 가능: {sorted(DISTRIBUTION_FIELDS | {'country'})}"
+        filter_kwargs = {
+            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
+            "country": country, "trial_phase": trial_phase,
+            "start_year": start_year, "end_year": end_year,
+            "overall_status": overall_status,
+        }
+        studies, capped, params, effective = _fetch(filter_kwargs)
+        if not params:
+            return _NO_FILTERS_MSG
+        _record_search("default", studies, capped, effective)
+        if not studies:
+            return f"조건에 맞는 시험이 0건입니다 (filters={effective})."
+        if field == "country":
+            result = aggregate_geo(studies)
+            kind = "geo"
         else:
-            result = aggregate_distribution(sr.studies, field)
-            key_fields = ["category", "trial_count"]
-
-        kind = FIELD_TO_KIND[field]
-        aid = session.next_artifact_id(kind)
-        session.artifacts[aid] = Artifact(
-            artifact_id=aid,
-            kind=kind,
-            data=result["data"],
-            buckets=result["buckets"],
-            notes=result.get("notes", []),
-            extra={"field": field},
-        )
+            result = aggregate_distribution(studies, field)
+            kind = "distribution"
+        aid = _finalize(kind, result, title, extra={"field": field})
         return (
-            f"artifact_id='{aid}' 생성 (kind={kind}, field={field}, "
-            f"{len(result['data'])}개 그룹). 미리보기: {_preview_rows(result['data'], key_fields)}"
+            f"bar_chart 확정: artifact_id='{aid}', kind={kind}, "
+            f"카테고리 {len(result['data'])}개, 검색 {len(studies)}건."
         )
 
     @tool
-    def compare_groups(search_labels: list[str], field: str = "phase") -> str:
-        """여러 검색 결과를 같은 축으로 나란히 비교 집계한다 (grouped bar chart용).
-
-        먼저 각 대상을 서로 다른 label로 search_trials 해두고, 그 label들을 여기에 넘겨라.
+    def analyze_comparison(
+        filter_sets: list[dict],
+        title: str,
+        field: str = "phase",
+    ) -> str:
+        """여러 대상을 같은 축(field)으로 나란히 비교(grouped_bar_chart)해 확정한다.
 
         Args:
-            search_labels: 비교할 검색 label 목록 (2개 이상).
+            filter_sets: 각 대상의 필터. 최소 2개 원소, 각 원소는
+                {"label": <표시명>, "drug_name": ..., "condition": ..., ...} 형태.
+                label은 서로 달라야 하고, label 외 필터 중 하나 이상은 있어야 한다.
+            title: 차트 제목.
             field: 비교 축. 'phase'(기본) 또는 'status'.
-        Returns:
-            생성된 artifact_id와 미리보기.
         """
-        if len(search_labels) < 2:
-            return "비교하려면 최소 2개의 search_label이 필요합니다."
+        if len(filter_sets) < 2:
+            return "비교하려면 최소 2개의 filter_sets가 필요합니다."
+        if field not in COMPARISON_FIELDS:
+            return f"field='{field}' 미지원. 가능: {sorted(COMPARISON_FIELDS)}"
+        labels = [fs.get("label") for fs in filter_sets]
+        if any(not lbl for lbl in labels):
+            return "filter_sets의 각 원소에 'label'을 지정하세요."
+        if len(set(labels)) != len(labels):
+            return "filter_sets의 label은 서로 달라야 합니다."
+
+        def _one(fs: dict):
+            fk = {k: v for k, v in fs.items() if k != "label"}
+            return fs["label"], _fetch(fk)
+
+        # 병렬 fetch — 같은 필터는 fetch_cache가 자동 dedupe.
+        with ThreadPoolExecutor(max_workers=min(len(filter_sets), 4)) as pool:
+            fetched = list(pool.map(_one, filter_sets))
+
         groups = []
-        for lbl in search_labels:
-            sr = session.searches.get(lbl)
-            if sr is None:
-                return f"search_label='{lbl}' 결과가 없습니다. 먼저 search_trials를 호출하세요."
-            groups.append({"label": lbl, "studies": sr.studies})
+        for label, (studies, capped, params, effective) in fetched:
+            if not params:
+                return f"label='{label}'의 필터가 비어 있습니다. {_NO_FILTERS_MSG}"
+            _record_search(label, studies, capped, effective)
+            groups.append({"label": label, "studies": studies})
+
+        if all(len(g["studies"]) == 0 for g in groups):
+            return "모든 대상의 검색 결과가 0건이라 비교할 수 없습니다."
 
         result = aggregate_comparison(groups, field=field)
-        aid = session.next_artifact_id("comparison")
-        session.artifacts[aid] = Artifact(
-            artifact_id=aid,
-            kind="comparison",
-            data=result["data"],
-            buckets=result["buckets"],
-            notes=result.get("notes", []),
+        aid = _finalize(
+            "comparison",
+            result,
+            title,
             extra={"group_labels": result["group_labels"], "field": field},
         )
         return (
-            f"artifact_id='{aid}' 생성 (comparison, groups={result['group_labels']}, "
-            f"{len(result['data'])}개 카테고리). 미리보기: {result['data'][:6]}"
+            f"grouped_bar_chart 확정: artifact_id='{aid}', "
+            f"groups={result['group_labels']}, 카테고리 {len(result['data'])}개."
         )
 
     @tool
-    def build_network(dimension: str = "sponsor_drug", search_label: str = "default") -> str:
-        """저장된 검색 결과로 엔티티 관계망을 만든다.
+    def analyze_network(
+        dimension: str,
+        title: str,
+        drug_name: str | None = None,
+        condition: str | None = None,
+        sponsor: str | None = None,
+        country: str | None = None,
+        trial_phase: str | None = None,
+        start_year: int | None = None,
+        end_year: int | None = None,
+        overall_status: str | None = None,
+    ) -> str:
+        """엔티티 관계망(network_graph)을 계산·확정한다.
 
         Args:
             dimension: 'sponsor_drug'(스폰서↔약물) 또는 'drug_drug'(병용연구 약물↔약물 공동출현).
-            search_label: 어떤 검색 결과를 쓸지. 기본 'default'.
-        Returns:
-            생성된 artifact_id와 상위 엣지 미리보기.
+            title: 차트 제목.
+            (검색 필터는 analyze_time_trend와 동일)
         """
-        if dimension not in ("sponsor_drug", "drug_drug"):
-            return "dimension은 'sponsor_drug' 또는 'drug_drug'만 가능합니다."
-        sr = session.searches.get(search_label)
-        if sr is None:
-            return f"search_label='{search_label}' 결과가 없습니다. 먼저 search_trials를 호출하세요."
-        if not sr.studies:
-            return f"'{search_label}' 검색 결과가 0건이라 네트워크를 만들 수 없습니다."
-
-        result = aggregate_network(sr.studies, dimension)
-        aid = session.next_artifact_id("network")
-        session.artifacts[aid] = Artifact(
-            artifact_id=aid,
-            kind="network",
-            data=result["data"],
-            buckets=result["buckets"],
-            notes=result.get("notes", []),
-            extra={"dimension": dimension},
-        )
-        top_edges = result["data"]["edges"][:5]
+        if dimension not in NETWORK_DIMENSIONS:
+            return f"dimension='{dimension}' 미지원. 가능: {sorted(NETWORK_DIMENSIONS)}"
+        filter_kwargs = {
+            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
+            "country": country, "trial_phase": trial_phase,
+            "start_year": start_year, "end_year": end_year,
+            "overall_status": overall_status,
+        }
+        studies, capped, params, effective = _fetch(filter_kwargs)
+        if not params:
+            return _NO_FILTERS_MSG
+        _record_search("default", studies, capped, effective)
+        if not studies:
+            return f"조건에 맞는 시험이 0건입니다 (filters={effective})."
+        result = aggregate_network(studies, dimension)
+        aid = _finalize("network", result, title, extra={"dimension": dimension})
         return (
-            f"artifact_id='{aid}' 생성 (network={dimension}, "
-            f"노드 {len(result['data']['nodes'])}개, 엣지 {len(result['data']['edges'])}개). "
-            f"상위 엣지: {top_edges}"
+            f"network_graph 확정: artifact_id='{aid}', "
+            f"노드 {len(result['data']['nodes'])}개, 엣지 {len(result['data']['edges'])}개."
         )
-
-    @tool
-    def finalize_visualization(artifact_id: str, chart_type: str, title: str) -> str:
-        """최종 시각화를 확정한다. 반드시 마지막에 한 번 호출하라.
-
-        Args:
-            artifact_id: 앞선 집계/네트워크 도구가 반환한 artifact_id.
-            chart_type: time_series | bar_chart | grouped_bar_chart | network_graph 중 하나.
-            title: 사람이 읽을 수 있는 차트 제목.
-        Returns:
-            확정 결과 메시지.
-        """
-        if chart_type not in ALLOWED_CHART_TYPES:
-            return f"허용되지 않은 chart_type '{chart_type}'. 가능: {sorted(ALLOWED_CHART_TYPES)}"
-        if artifact_id not in session.artifacts:
-            return f"artifact_id='{artifact_id}'를 찾을 수 없습니다. 존재하는: {list(session.artifacts)}"
-        artifact = session.artifacts[artifact_id]
-        allowed = KIND_TO_CHART.get(artifact.kind, set())
-        if chart_type not in allowed:
-            return (
-                f"artifact kind='{artifact.kind}'에는 chart_type={sorted(allowed)}만 가능합니다. "
-                f"'{chart_type}'은(는) 이 kind와 맞지 않으니 규칙에 맞는 chart_type으로 다시 호출하세요."
-            )
-        session.final_artifact_id = artifact_id
-        session.final_chart_type = chart_type
-        session.final_title = title
-        return f"확정 완료: {artifact_id} → {chart_type} ('{title}')"
 
     @tool
     def report_unresolvable(reason: str, missing: list[str] | None = None) -> str:
@@ -288,10 +302,9 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         return f"특정 불가로 접수됨: {reason}. 추가 도구 호출 없이 종료하라."
 
     return [
-        search_trials,
-        aggregate_by,
-        compare_groups,
-        build_network,
-        finalize_visualization,
+        analyze_time_trend,
+        analyze_distribution,
+        analyze_comparison,
+        analyze_network,
         report_unresolvable,
     ]
