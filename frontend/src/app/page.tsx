@@ -28,14 +28,11 @@ export default function ChatPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        {empty ? (
-          <ExampleQueries onPick={send} />
-        ) : (
-          <MessageList messages={messages} />
-        )}
+        <MessageList messages={messages} />
       </div>
 
       <div className="sticky bottom-0 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur">
+        {empty && <ExampleQueries onPick={send} />}
         <ChatInput onSubmit={send} disabled={isSending} />
       </div>
     </main>
