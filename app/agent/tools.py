@@ -40,6 +40,13 @@ DISTRIBUTION_FIELDS = {"phase", "intervention_type", "status"}
 COMPARISON_FIELDS = {"phase", "status"}
 NETWORK_DIMENSIONS = {"sponsor_drug", "drug_drug"}
 
+# Filter fields shared by every single-target tool (comparison uses filter_sets instead).
+# Kept in sync with each tool's signature so that `locals()`-based collection is safe.
+SINGLE_TARGET_FILTER_FIELDS = (
+    "drug_name", "condition", "sponsor", "country",
+    "trial_phase", "start_year", "end_year", "overall_status",
+)
+
 
 def _merged_filters(session_filters: dict, tool_args: dict) -> dict:
     """Filters declared on the request always win over LLM-supplied values (deterministic guarantee)."""
@@ -108,6 +115,30 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         "report_unresolvable if the question does not specify a target."
     )
 
+    def _run_single_target(
+        kind: str,
+        title: str,
+        filter_kwargs: dict,
+        aggregate_fn,
+        format_success,
+        extra: dict | None = None,
+    ) -> str:
+        """Shared fetch → check → record → aggregate → finalize flow for single-target tools.
+
+        `aggregate_fn(studies) -> result` and `format_success(aid, result, studies, capped) -> str`
+        are the only tool-specific pieces; everything else (params gate, zero-result short-circuit,
+        search recording, artifact commit) is unified here.
+        """
+        studies, capped, params, effective = _fetch(filter_kwargs)
+        if not params:
+            return _NO_FILTERS_MSG
+        _record_search("default", studies, capped, effective)
+        if not studies:
+            return f"No trials matched (filters={effective})."
+        result = aggregate_fn(studies)
+        aid = _finalize(kind, result, title, extra=extra)
+        return format_success(aid, result, studies, capped)
+
     @tool
     def analyze_time_trend(
         title: str,
@@ -129,23 +160,17 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         Returns:
             Summary of the commit (artifact_id, number of data points, search size).
         """
-        filter_kwargs = {
-            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
-            "country": country, "trial_phase": trial_phase,
-            "start_year": start_year, "end_year": end_year,
-            "overall_status": overall_status,
-        }
-        studies, capped, params, effective = _fetch(filter_kwargs)
-        if not params:
-            return _NO_FILTERS_MSG
-        _record_search("default", studies, capped, effective)
-        if not studies:
-            return f"No trials matched (filters={effective}); no visualization committed."
-        result = aggregate_time_trend(studies)
-        aid = _finalize("time_trend", result, title)
-        return (
-            f"Committed time_series: artifact_id='{aid}', {len(result['data'])} years, "
-            f"{len(studies)} studies{' (cap reached)' if capped else ''}."
+        _args = locals()
+        filter_kwargs = {k: _args[k] for k in SINGLE_TARGET_FILTER_FIELDS}
+        return _run_single_target(
+            kind="time_trend",
+            title=title,
+            filter_kwargs=filter_kwargs,
+            aggregate_fn=aggregate_time_trend,
+            format_success=lambda aid, result, studies, capped: (
+                f"Committed time_series: artifact_id='{aid}', {len(result['data'])} years, "
+                f"{len(studies)} studies{' (cap reached)' if capped else ''}."
+            ),
         )
 
     @tool
@@ -174,28 +199,24 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
                 f"Unsupported field='{field}'. "
                 f"Allowed: {sorted(DISTRIBUTION_FIELDS | {'country'})}"
             )
-        filter_kwargs = {
-            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
-            "country": country, "trial_phase": trial_phase,
-            "start_year": start_year, "end_year": end_year,
-            "overall_status": overall_status,
-        }
-        studies, capped, params, effective = _fetch(filter_kwargs)
-        if not params:
-            return _NO_FILTERS_MSG
-        _record_search("default", studies, capped, effective)
-        if not studies:
-            return f"No trials matched (filters={effective})."
+        _args = locals()
+        filter_kwargs = {k: _args[k] for k in SINGLE_TARGET_FILTER_FIELDS}
         if field == "country":
-            result = aggregate_geo(studies)
+            aggregate_fn = aggregate_geo
             kind = "geo"
         else:
-            result = aggregate_distribution(studies, field)
+            aggregate_fn = lambda studies: aggregate_distribution(studies, field)  # noqa: E731
             kind = "distribution"
-        aid = _finalize(kind, result, title, extra={"field": field})
-        return (
-            f"Committed bar_chart: artifact_id='{aid}', kind={kind}, "
-            f"{len(result['data'])} categories, {len(studies)} studies."
+        return _run_single_target(
+            kind=kind,
+            title=title,
+            filter_kwargs=filter_kwargs,
+            aggregate_fn=aggregate_fn,
+            format_success=lambda aid, result, studies, capped: (
+                f"Committed bar_chart: artifact_id='{aid}', kind={kind}, "
+                f"{len(result['data'])} categories, {len(studies)} studies."
+            ),
+            extra={"field": field},
         )
 
     @tool
@@ -276,23 +297,18 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         """
         if dimension not in NETWORK_DIMENSIONS:
             return f"Unsupported dimension='{dimension}'. Allowed: {sorted(NETWORK_DIMENSIONS)}"
-        filter_kwargs = {
-            "drug_name": drug_name, "condition": condition, "sponsor": sponsor,
-            "country": country, "trial_phase": trial_phase,
-            "start_year": start_year, "end_year": end_year,
-            "overall_status": overall_status,
-        }
-        studies, capped, params, effective = _fetch(filter_kwargs)
-        if not params:
-            return _NO_FILTERS_MSG
-        _record_search("default", studies, capped, effective)
-        if not studies:
-            return f"No trials matched (filters={effective})."
-        result = aggregate_network(studies, dimension)
-        aid = _finalize("network", result, title, extra={"dimension": dimension})
-        return (
-            f"Committed network_graph: artifact_id='{aid}', "
-            f"{len(result['data']['nodes'])} nodes, {len(result['data']['edges'])} edges."
+        _args = locals()
+        filter_kwargs = {k: _args[k] for k in SINGLE_TARGET_FILTER_FIELDS}
+        return _run_single_target(
+            kind="network",
+            title=title,
+            filter_kwargs=filter_kwargs,
+            aggregate_fn=lambda studies: aggregate_network(studies, dimension),
+            format_success=lambda aid, result, studies, capped: (
+                f"Committed network_graph: artifact_id='{aid}', "
+                f"{len(result['data']['nodes'])} nodes, {len(result['data']['edges'])} edges."
+            ),
+            extra={"dimension": dimension},
         )
 
     @tool

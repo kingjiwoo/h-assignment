@@ -16,6 +16,28 @@ from app.core import extractors as ex
 PHASE_ORDER = ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]
 
 
+def _bucket_by_field(studies: list[dict], field: str) -> dict[str, list[str]]:
+    """Bucket studies by the given field value → {category: [nct_id, ...]}.
+
+    Supported fields: 'phase' | 'intervention_type' | 'status'.
+    phases() already normalizes missing values to ['NA']; status None becomes 'UNKNOWN'.
+    intervention_type dedupes within a study so the same type only counts once per study.
+    """
+    buckets: dict[str, list[str]] = defaultdict(list)
+    for s in studies:
+        nct = ex.nct_id(s)
+        if field == "phase":
+            for ph in ex.phases(s):
+                buckets[ph].append(nct)
+        elif field == "intervention_type":
+            for t in set(ex.intervention_types(s)):
+                buckets[t].append(nct)
+        elif field == "status":
+            st = ex.overall_status(s) or "UNKNOWN"
+            buckets[st].append(nct)
+    return buckets
+
+
 def aggregate_time_trend(studies: list[dict]) -> dict:
     """Trial count by start year."""
     buckets: dict[str, list[str]] = defaultdict(list)
@@ -36,18 +58,7 @@ def aggregate_time_trend(studies: list[dict]) -> dict:
 
 def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
     """Trial count distribution by phase / intervention_type / status."""
-    buckets: dict[str, list[str]] = defaultdict(list)
-    for s in studies:
-        nct = ex.nct_id(s)
-        if field == "phase":
-            for ph in ex.phases(s):
-                buckets[ph].append(nct)
-        elif field == "intervention_type":
-            for t in set(ex.intervention_types(s)):
-                buckets[t].append(nct)
-        elif field == "status":
-            st = ex.overall_status(s) or "UNKNOWN"
-            buckets[st].append(nct)
+    buckets = _bucket_by_field(studies, field)
 
     if field == "phase":
         keys = sorted(buckets, key=lambda k: PHASE_ORDER.index(k) if k in PHASE_ORDER else 99)
@@ -69,15 +80,7 @@ def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
 
     for g in groups:
         label = g["label"]
-        cat_buckets: dict[str, list[str]] = defaultdict(list)
-        for s in g["studies"]:
-            nct = ex.nct_id(s)
-            if field == "phase":
-                for ph in ex.phases(s):
-                    cat_buckets[ph].append(nct)
-            elif field == "status":
-                st = ex.overall_status(s) or "UNKNOWN"
-                cat_buckets[st].append(nct)
+        cat_buckets = _bucket_by_field(g["studies"], field)
         per_group[label] = cat_buckets
         for c in cat_buckets:
             if c not in all_categories:
