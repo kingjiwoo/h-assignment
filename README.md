@@ -1,225 +1,213 @@
 # ClinicalTrials.gov Query-to-Visualization Agent (Backend)
 
-자연어 임상시험 질문을 받아 [ClinicalTrials.gov v2 API](https://clinicaltrials.gov/data-api/api)에서 실제 데이터를 조회·집계하고, 프론트엔드가 그대로 렌더링할 수 있는 **구조화된 시각화 스펙(JSON)**을 반환하는 백엔드 서비스입니다.
+A backend service that takes a natural-language clinical-trial question, queries and aggregates real data from the [ClinicalTrials.gov v2 API](https://clinicaltrials.gov/data-api/api), and returns a **structured visualization spec (JSON)** the frontend can render as-is.
 
-- **Stack:** Python 3.11+, FastAPI, LangGraph(`create_react_agent`), Pydantic
-- **에이전트 구조:** LLM이 도구를 오케스트레이션하는 ReAct 에이전트. 단, **모든 수치는 결정론적 도구가 계산**하고 LLM은 숫자를 만들지 않는다.
-- **지원 시각화:** `time_series`, `bar_chart`, `grouped_bar_chart`, `network_graph` (+ 빈 결과용 `no_data`)
-- **지원 질문 유형:** 시간 추세 · 분포 · 비교 · 지리적 분포 · 관계망(network)
-- **보너스:** 각 데이터 포인트에 근거 `nct_id` + 실제 API 텍스트 발췌를 붙이는 Deep Citations
+- **Stack:** Python 3.11+, FastAPI, LangGraph (`create_react_agent`), Pydantic
+- **Agent shape:** A ReAct agent where the LLM orchestrates tools. Crucially, **every number is computed by deterministic tools** — the LLM never fabricates values.
+- **Supported visualizations:** `time_series`, `bar_chart`, `grouped_bar_chart`, `network_graph` (plus `no_data` for empty results)
+- **Supported question types:** time trends · distributions · comparisons · geographic distributions · relationship graphs
+- **Bonus:** Deep Citations that attach the source `nct_id` and an actual API text excerpt to each data point.
 
 ---
 
-## 1. 빠른 시작 (Run)
+## 1. Quickstart (Run)
 
-### 1-A. Docker Compose로 한 번에 (권장)
+### 1-A. One-shot with Docker Compose (recommended)
 
-백엔드(FastAPI:8000)와 프론트엔드(Next.js:3000)를 한 명령으로 띄웁니다. 호스트에 Python/Node를 설치할 필요가 없습니다.
+Boots both the backend (FastAPI on :8000) and frontend (Next.js on :3000) in a single command. You don't need Python or Node on the host.
 
 ```bash
-cp .env.example .env          # ANTHROPIC_API_KEY 또는 OPENAI_API_KEY 중 하나 입력
-docker compose up --build     # 최초 빌드 1~2분, 이후 캐시로 빠름
-# → http://localhost:3000 (프론트),  http://localhost:8000/docs (Swagger)
+cp .env.example .env          # Fill in either ANTHROPIC_API_KEY or OPENAI_API_KEY
+docker compose up --build     # First build takes ~1–2 min; cached afterwards
+# → http://localhost:3000 (frontend),  http://localhost:8000/docs (Swagger)
 ```
 
-- Hot reload 지원: `app/`, `frontend/src/` 등 소스를 컨테이너에 volume 마운트하고, uvicorn `--reload` / `next dev`가 감지합니다.
-- 백엔드가 `/health` 통과해야 프론트엔드가 기동합니다 (`depends_on: service_healthy`).
-- `node_modules`는 named volume으로 격리되어 호스트 `frontend/node_modules`와 섞이지 않습니다.
+- Hot reload: `app/` and `frontend/src/` are volume-mounted into the containers, and `uvicorn --reload` / `next dev` pick up changes.
+- The frontend only starts after the backend's `/health` succeeds (`depends_on: service_healthy`).
+- `node_modules` lives in a named volume, so it never leaks into the host `frontend/node_modules`.
 
-종료: `Ctrl+C` → 컨테이너 제거는 `docker compose down` (볼륨까지 지우려면 `-v`).
+Shut down with `Ctrl+C`; remove containers with `docker compose down` (add `-v` to also drop volumes).
 
-### 1-B. 로컬에서 개별 실행 (Docker 없이)
+### 1-B. Local, no Docker
 
 ```bash
-uv sync                       # 또는: pip install -e .
+uv sync                       # or: pip install -e .
 cp .env.example .env
-uv run uvicorn app.main:app --reload            # 백엔드 :8000
-# 다른 터미널
-cd frontend && pnpm install && pnpm dev         # 프론트엔드 :3000 → 백엔드 :8000 호출
+uv run uvicorn app.main:app --reload            # backend on :8000
+# In another terminal
+cd frontend && pnpm install && pnpm dev         # frontend on :3000 → calls backend :8000
 ```
 
-### 환경변수
+### Environment variables
 
-| 환경변수 | 필수 | 설명 |
+| Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | 둘 중 하나 | Anthropic 사용 시 |
-| `OPENAI_API_KEY` | 둘 중 하나 | OpenAI 사용 시 |
-| `LLM_PROVIDER` | 선택 | `anthropic`\|`openai` (미지정 시 키 존재로 자동 선택, Anthropic 우선) |
-| `LLM_MODEL` | 선택 | 모델명 override |
-| `MAX_STUDIES` | 선택 | 요청당 CT.gov에서 가져올 study 상한(기본 500) |
+| `ANTHROPIC_API_KEY` | one of the two | For Anthropic |
+| `OPENAI_API_KEY` | one of the two | For OpenAI |
+| `LLM_PROVIDER` | optional | `anthropic`\|`openai` (auto-selected from whichever key is present, Anthropic first) |
+| `LLM_MODEL` | optional | Model name override |
+| `MAX_STUDIES` | optional | Per-request cap on studies pulled from CT.gov (default 500) |
 
-### 호출 예시
+### Example call
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"query": "Show a network of sponsors and drugs for melanoma trials.", "condition": "melanoma"}'
 ```
 
-### 테스트 / 예시 재생성
+### Tests / regenerating examples
 ```bash
-uv run pytest                                        # 집계·도구·조립 단위/통합 테스트(네트워크·LLM 불필요)
-PYTHONPATH=. uv run python scripts/run_examples.py   # examples/example_runs.md 재생성
+uv run pytest                                        # Unit + integration tests for aggregation/tools/assembly (no network / no LLM needed)
+PYTHONPATH=. uv run python scripts/run_examples.py   # Regenerates examples/example_runs.md
 ```
 
-프론트엔드 UI 세부 설명은 [`frontend/README.md`](./frontend/README.md) 참고.
+See [`frontend/README.md`](./frontend/README.md) for frontend-specific details.
 
 ---
 
-## 2. 요청 스키마 (Request)
+## 2. Request schema
 
-`POST /query`, `Content-Type: application/json`. `query`만 필수이며 나머지는 선택 필터입니다.
-**명시적으로 전달된 필터는 에이전트가 자연어에서 판단한 값보다 항상 우선 적용됩니다**(도구 계층에서 결정론적으로 병합).
+`POST /query`, `Content-Type: application/json`. Only `query` is required; the rest are optional filters.
+**Explicitly supplied filters always beat values the agent infers from natural language** (deterministically merged in the tool layer).
 
-| 필드 | 타입 | 필수 | 설명 / 검증 |
+| Field | Type | Required | Description / validation |
 |---|---|---|---|
-| `query` | string | ✅ | 자연어 질문 (min length 1) |
-| `drug_name` | string | ❌ | 중재/약물명. 예: `Pembrolizumab` |
-| `condition` | string | ❌ | 질환명. 예: `breast cancer` |
-| `sponsor` | string | ❌ | 스폰서명 |
-| `country` | string | ❌ | 국가명. 예: `Canada` |
+| `query` | string | ✅ | Natural-language question (min length 1) |
+| `drug_name` | string | ❌ | Intervention/drug name, e.g., `Pembrolizumab` |
+| `condition` | string | ❌ | Condition, e.g., `breast cancer` |
+| `sponsor` | string | ❌ | Sponsor name |
+| `country` | string | ❌ | Country, e.g., `Canada` |
 | `trial_phase` | string | ❌ | `EARLY_PHASE1`\|`PHASE1`\|`PHASE2`\|`PHASE3`\|`PHASE4`\|`NA` |
-| `start_year` | int | ❌ | 시작 연도(inclusive) |
-| `end_year` | int | ❌ | 종료 연도(inclusive) |
+| `start_year` | int | ❌ | Start year (inclusive) |
+| `end_year` | int | ❌ | End year (inclusive) |
 
-Pydantic(`app/schemas.py`)이 타입·필수여부를 검증하며, 위반 시 FastAPI가 422를 반환합니다.
+Pydantic (`app/schemas.py`) validates types/required fields; violations return HTTP 422.
 
 ---
 
-## 3. 응답 스키마 (Response)
+## 3. Response schema
 
 ```jsonc
 {
   "visualization": {
     "type": "network_graph",       // time_series | bar_chart | grouped_bar_chart | network_graph | no_data
-    "title": "사람이 읽을 수 있는 제목",
-    "encoding": { ... },            // 아래 타입별 표 참고
-    "data": [ ... ] | { ... }       // 아래 타입별 표 참고
+    "title": "Human-readable title",
+    "encoding": { ... },            // See the per-type table below
+    "data": [ ... ] | { ... }       // See the per-type table below
   },
   "meta": {
-    "filters": { ... },             // 요청에 명시된 필터 에코백
+    "filters": { ... },             // Echoes the filters supplied on the request
     "analysis_type": "network",     // time_trend|distribution|comparison|geo|network|null
     "source": "clinicaltrials.gov",
-    "study_count": 300,             // 집계에 사용된 study 수
-    "capped": true,                // MAX_STUDIES 상한에 걸렸는지
-    "notes": [ "..." ]              // 가정·필터·절삭 등 사람이 읽는 노트
+    "study_count": 300,             // Number of studies used for aggregation
+    "capped": true,                // Whether MAX_STUDIES was hit
+    "notes": [ "..." ]              // Human-readable notes on assumptions/filters/truncation
   },
-  "citations": {                    // (보너스) 없으면 null
-    "<bucket_key>": [ { "nct_id": "NCT...", "excerpt": "API 응답의 정확한 발췌" } ]
+  "citations": {                    // (Bonus) null if absent
+    "<bucket_key>": [ { "nct_id": "NCT...", "excerpt": "Verbatim excerpt from the API response" } ]
   }
 }
 ```
 
-### 차트 타입별 `encoding` / `data` 형태
+### `encoding` / `data` shape per chart type
 
 | type | encoding | data |
 |---|---|---|
 | `time_series` | `{x:{field:"year",type:"temporal"}, y:{field:"trial_count",type:"quantitative"}}` | `[{year, trial_count}]` |
-| `bar_chart` (분포) | `{x:{field:"category"}, y:{field:"trial_count"}}` | `[{category, trial_count}]` |
-| `bar_chart` (지리) | `{x:{field:"country"}, y:{field:"trial_count"}}` | `[{country, trial_count}]` |
-| `grouped_bar_chart` | `{x:{field:"category"}, y:{field:"<group>"}, series:[라벨...]}` | `[{category, "<라벨1>":n, "<라벨2>":n}]` |
+| `bar_chart` (distribution) | `{x:{field:"category"}, y:{field:"trial_count"}}` | `[{category, trial_count}]` |
+| `bar_chart` (geo) | `{x:{field:"country"}, y:{field:"trial_count"}}` | `[{country, trial_count}]` |
+| `grouped_bar_chart` | `{x:{field:"category"}, y:{field:"<group>"}, series:[labels...]}` | `[{category, "<label1>":n, "<label2>":n}]` |
 | `network_graph` | `{nodes:{id,group,size}, edges:{source,target,weight}}` | `{nodes:[{id,kind,degree}], edges:[{source,target,weight}]}` |
 | `no_data` | `{}` | `[]` |
 
-### Citations `bucket_key` 규칙
-- 분포/시간/지리: 데이터 포인트의 카테고리 값 (예: `"PHASE3"`, `"2020"`, `"Canada"`)
-- 비교: `"<그룹라벨>|<카테고리>"` (예: `"nivo|PHASE2"`)
-- 네트워크: `"<source>|<target>"` (예: `"Merck Sharp & Dohme LLC|Pembrolizumab"`)
+### Citations `bucket_key` conventions
+- Distribution / time / geo: the data point's category value (e.g., `"PHASE3"`, `"2020"`, `"Canada"`)
+- Comparison: `"<group_label>|<category>"` (e.g., `"nivo|PHASE2"`)
+- Network: `"<source>|<target>"` (e.g., `"Merck Sharp & Dohme LLC|Pembrolizumab"`)
 
-버킷당 최대 3개 citation으로 제한합니다.
+Capped at 3 citations per bucket.
 
 ---
 
-## 4. 아키텍처 & 설계 결정
+## 4. Architecture & design decisions
 
-### 구조: "통제된 ReAct 에이전트"
+### Shape: a "constrained ReAct agent"
 
-LLM이 도구를 **오케스트레이션**(어떤 검색을 하고 어떤 집계를 조합할지)하되, **모든 수치는 결정론적
-도구가 계산**합니다. 자세한 다이어그램은 [`docs/architecture.md`](docs/architecture.md).
+The LLM **orchestrates** tools (deciding what to search and which aggregation to combine), but **every number is computed by deterministic tools**. See [`docs/architecture.md`](docs/architecture.md) for a diagram.
 
 ```
 POST /query
    │
    ▼
-create_react_agent (LLM)  ──▶ 도구 호출 루프 (LLM이 순서·조합 결정)
+create_react_agent (LLM)  ──▶ Tool-call loop (LLM decides order and combinations)
    │
-   ├─ search_trials(filters, label)      : CT.gov 검색 → Session에 저장 (수치 계산 아님)
-   ├─ aggregate_by(field, label)         : year/phase/type/status/country group-by count
-   ├─ compare_groups(labels, field)      : 여러 검색을 같은 축으로 비교 (grouped bar)
-   ├─ build_network(dimension, label)    : sponsor↔drug / drug↔drug 관계망
-   └─ finalize_visualization(id, type, title) : 최종 시각화 확정
+   ├─ analyze_time_trend(filters, title)          : CT.gov search + yearly aggregation → time_series
+   ├─ analyze_distribution(field, filters, title) : phase/intervention_type/status/country distribution → bar_chart
+   ├─ analyze_comparison(filter_sets, field)      : parallel searches compared on a shared axis → grouped_bar_chart
+   ├─ analyze_network(dimension, filters)         : sponsor↔drug / drug↔drug relationship graph → network_graph
+   └─ report_unresolvable(reason, missing)        : honest abstention when the target cannot be pinned down
    │
    ▼
-서버가 Session의 artifact(도구가 계산한 실제 데이터)로 QueryResponse 조립
+The server assembles the QueryResponse straight from the Session's artifact (the real data the tool computed)
 ```
 
-**핵심 안전장치 — 숫자는 LLM을 거치지 않는다:**
-도구는 실제 수치를 `app/core`(집계 코어)로 계산해 **Session에 저장**하고, LLM에는 요약(preview)만
-반환합니다. 최종 응답은 LLM이 쓴 텍스트가 아니라 **서버가 Session에 저장된 artifact에서 직접 꺼내**
-조립합니다. 즉 LLM이 trial 수를 지어내거나 전사 오류를 낼 경로가 구조적으로 없습니다.
+**Core safeguard — numbers never pass through the LLM:**
+Tools compute the actual figures via `app/core` (the aggregation core) and **store them on the Session**; the LLM only sees a summary (preview). The final response is assembled by the **server pulling from Session artifacts directly** — not from LLM-written text. Structurally, there is no path for the LLM to invent a trial count or make a transcription error.
 
-### 계층 구성
-| 계층 | 위치 | 책임 |
+### Layer layout
+| Layer | Location | Responsibility |
 |---|---|---|
-| API | `app/main.py` | FastAPI, 요청 검증, 명시 필터 추출 |
-| 오케스트레이션 | `app/agent/` | `runner`(에이전트 실행+응답 조립), `tools`(도구), `session`(요청 상태) |
-| 계산 코어 | `app/core/` | `aggregate`(5개 순수 집계), `extractors`(필드 추출), `query`(파라미터 빌드) — **LLM 무관, 전량 단위테스트** |
-| 외부 연동 | `app/services/` | `ctgov_client`(CT.gov HTTP), `llm`(provider-agnostic) |
+| API | `app/main.py` | FastAPI, request validation, explicit-filter extraction |
+| Orchestration | `app/agent/` | `runner` (agent execution + response assembly), `tools` (tools), `session` (per-request state) |
+| Compute core | `app/core/` | `aggregate` (5 pure aggregations), `extractors` (field extraction), `query` (params builder) — **LLM-independent, fully unit-tested** |
+| External integrations | `app/services/` | `ctgov_client` (CT.gov HTTP), `llm` (provider-agnostic) |
 
-### 핵심 설계 결정과 트레이드오프
+### Key decisions and tradeoffs
 
-**1) 왜 ReAct 에이전트(`create_react_agent`)인가 — 확장성**
-질문 유형을 코드에 하드코딩(고정 switch)하면 새 질문 클래스마다 코드 변경이 필요해 확장성이 떨어집니다.
-에이전트가 도구를 **런타임에 조합**하게 하면, 명시적으로 배선하지 않은 조합(예: 특정 필터+특정 집계)이나
-장차 멀티스텝 질문("상위 스폰서를 찾고 → 그들의 추이를 보라")까지 **코드 변경 없이** 확장할 수 있습니다.
+**1) Why a ReAct agent (`create_react_agent`) — extensibility**
+Hard-coding question types in the code (fixed switch) would require code changes for every new question class, hurting extensibility. Letting the agent **compose tools at runtime** means new combinations (a certain filter + a certain aggregation) — and even multi-step questions in the future ("find the top sponsors → look at their trends") — can be supported **without code changes**.
 
-**2) 그러나 "숫자 생성"은 절대 위임하지 않음 — 할루시네이션 방지**
-ReAct의 위험은 LLM이 수치를 지어내는 것입니다. 그래서 집계·카운트는 전부 `app/core`의 순수 함수(도구)로
-가두고, LLM은 "판단"(도구 선택·필터 추출·제목 생성)에만 관여합니다. 도구가 계산한 값은 Session에 저장돼
-LLM 텍스트를 우회해 응답에 실립니다. → 채점 기준 "avoid hallucination-prone steps / validation·constraints"에 대응.
+**2) But number-generation is never delegated — hallucination guard**
+The core risk of ReAct is the LLM inventing numbers. So every count/aggregation is walled off in pure functions under `app/core` (invoked by tools), and the LLM only handles "judgment" (tool choice, filter extraction, title generation). Tool-computed values are stored on the Session and reach the response bypassing LLM text. → Directly addresses the rubric's "avoid hallucination-prone steps / validation·constraints."
 
-**3) 결정론적 코어 재사용 — 테스트 용이성**
-5개 집계 함수는 실제로 "범용 group-by-count + network 특수케이스"입니다. 이를 `app/core`에 순수 함수로
-두어 오케스트레이션(에이전트)과 분리했고, 네트워크·LLM 없이 fixture만으로 전량 단위테스트합니다.
-오케스트레이션을 그래프↔에이전트로 바꿔도 이 코어와 테스트는 불변입니다.
+**3) Deterministic core reuse — testability**
+The 5 aggregation functions are essentially "generic group-by-count + a network special case." Keeping them as pure functions under `app/core`, separate from orchestration (the agent), makes them fully unit-testable from fixtures alone — no network, no LLM. Swapping the orchestration from graph to agent left this core and its tests untouched.
 
-**4) 엔티티 이름 교정 계층을 의도적으로 넣지 않음**
-CT.gov 검색엔진(Essie)이 브랜드명(`Keytruda`→Pembrolizumab)·오타(`pembrolizumb`)·동의어(`heart attack`)를
-이미 처리함을 실측 확인 → 별도 교정 도구는 과잉설계로 제외.
+**4) Deliberately no entity-name normalization layer**
+CT.gov's search engine (Essie) already handles brand names (`Keytruda` → Pembrolizumab), typos (`pembrolizumb`), and synonyms (`heart attack`) — confirmed empirically. A separate normalization tool would be over-engineering.
 
-**5) 실 API 데이터의 sensible 처리 — cap & top-N**
-서버사이드 group-by가 없어 필터 범위 내 study를 받아 메모리 집계하되, `MAX_STUDIES` 상한을 두고 초과 시
-`meta.capped=true`+노트로 "표본 기준"임을 표기합니다. network는 상위 60엣지, geo는 상위 25국으로 절삭하고
-절삭 사실을 노트에 남겨 "허브 중심의 의미있는 관계망"을 반환합니다.
+**5) Sensible handling of real API data — cap & top-N**
+Since there is no server-side group-by, we pull studies within the filter range and aggregate in memory, but cap at `MAX_STUDIES` and mark `meta.capped=true` plus a note when the cap is hit ("sample-based"). Networks keep the top 60 edges and geo keeps the top 25 countries; the truncation is disclosed in the notes so what we return is a hub-focused, meaningful relationship graph.
 
-### 확장 방법
-- **새 집계 축 추가:** `aggregate_by`의 `field` 목록에 값 추가 + `app/core/aggregate`에 매핑. 도구 시그니처 유지 → 에이전트가 자동 활용.
-- **새 도구 추가:** `app/agent/tools.py`에 `@tool` 하나 추가 → 에이전트가 프롬프트만으로 조합 가능.
+### Extension points
+- **Add an aggregation axis:** Extend the `field` set in the analyze tools and add a mapping in `app/core/aggregate`. Tool signatures stay stable → the agent picks it up automatically.
+- **Add a tool:** Drop a new `@tool` into `app/agent/tools.py`. The agent can start composing it via the prompt alone.
 
 ---
 
-## 5. 검증 방법 (How I Validated Correctness)
+## 5. How I validated correctness
 
-- **계산 코어 단위테스트** (`tests/test_aggregate.py`, `test_query_builder.py`): fixture로 5개 집계와 파라미터 빌드를 검증. study 단위 국가 dedupe, phase 미지정→`NA`, 네트워크 엣지 weight, comparison 축 정렬 등 경계 포함.
-- **에이전트 도구+조립 통합테스트** (`tests/test_agent_flow.py`): 가짜 클라이언트(fixture)로 도구를 순서대로 호출해 조립 결과·citation·**명시 필터 우선 규칙**·no_data·가드(검색 없이 집계 시도)를 검증. LLM/네트워크 불필요.
-- **실 API 통합 검증** (`scripts/run_examples.py`): 6개 예시(5개 카테고리+빈 결과)를 실제 CT.gov API로 실행해 `examples/example_runs.md`에 기록. 네트워크가 실제 허브 스폰서(NCI·Merck 등)를 연결하는지, citation의 `nct_id`+발췌가 실제 study와 일치하는지 확인.
-- **API 계약 사전 실측:** 구현 전 `curl`로 필드셋·`filter.advanced`(phase/date range)·`query.locn`·페이지네이션·최대 pageSize를 직접 확인.
+- **Compute-core unit tests** (`tests/test_aggregate.py`, `test_query_builder.py`): fixture-based tests of the 5 aggregations and the params builder. Includes per-study country dedupe, phase-missing → `NA`, network edge weights, comparison-axis ordering, and other edge cases.
+- **Agent-tool + assembly integration tests** (`tests/test_agent_flow.py`): fake client (fixture) drives the tools in sequence, checking assembly output, citations, the **explicit-filter-wins rule**, no_data, and guards (e.g., aggregating without a search). No LLM/network needed.
+- **Real API validation** (`scripts/run_examples.py`): 6 examples (5 categories + an empty-result case) executed against the real CT.gov API and recorded in `examples/example_runs.md`. Verified that the network really links hub sponsors (NCI, Merck, etc.) and that citation `nct_id`s + excerpts match actual studies.
+- **API contract sanity-checked up front:** Before writing code, I used `curl` to confirm the field set, `filter.advanced` (phase/date range), `query.locn`, pagination, and the max pageSize.
 
-**전체 테스트 17개 통과** (`uv run pytest`).
-
----
-
-## 6. 한계점 & 개선 방향 (Limitations / With More Time)
-
-- **`MAX_STUDIES` 표본 편향:** 상한 초과 쿼리는 관련도 상위 N건만 집계하므로 특히 time_trend가 전수 census가 아닌 표본이 됩니다(`capped` 표기). → 개선: time_trend는 연도별 `countTotal` 분할 질의로 정확 집계.
-- **멀티홉 질문 미구현:** 현재 프롬프트/예시는 단일홉 위주입니다. 에이전트 구조라 "상위 스폰서→그들의 추이" 같은 멀티홉이 원리적으로 가능하지만 전용 도구/검증은 시간상 보류. → 개선: 중간 결과를 다음 검색에 넣는 도구 추가 + 무한루프 방지 강화.
-- **HTTP 클라이언트:** `httpx` 호출 시 CT.gov 엣지에서 일관된 403(TLS 지문 추정)이 발생해 `requests`로 전환. 원인 정밀 분석은 보류.
-- **LLM 실경로 예시:** 제출 환경에 API 키가 없어 `example_runs.md`는 `scripted` 모드(도구 시퀀스 재현)로 생성했습니다. 데이터·집계·조립은 실제 코드/API 결과이며, 키를 넣으면 동일 스크립트가 `run_agent`(실제 에이전트)로 실행됩니다.
-- **에이전트 비결정성:** ReAct는 도구 선택이 매 실행 달라질 수 있습니다. 수치 정확성은 도구가 보장하지만, "선택된 차트 타입"은 달라질 수 있어 프롬프트로 유도만 합니다. → 개선: 도구 선택에 대한 사후 검증/평가 셋.
+**All 34 tests pass** (`uv run pytest`).
 
 ---
 
-## 7. AI 도구 사용 내역 (Integrity Note)
+## 6. Limitations & directions for more time
 
-- **사용 도구:** Claude Code(페어 프로그래밍/코드 생성), 웹 검색(LangGraph 싱글 vs 멀티에이전트·ReAct 트레이드오프 조사).
-- **직접 설계·판단한 부분(deliberate):** 전체 아키텍처, "LLM은 오케스트레이션만·수치는 도구가 계산·응답은 Session artifact에서 조립" 원칙, ReAct 채택 근거와 그 위험(숫자 생성)을 봉쇄하는 방식, 이름 교정 계층 제외, 응답 스키마·citation 버킷 키 규칙, cap/top-N 정직성 장치. (초기엔 결정론적 그래프로 구현했다가, 확장성 관점을 반영해 ReAct 에이전트로 리팩터링하며 계산 코어는 그대로 재사용.)
-- **생성 후 검증·조정한 부분(generated & adapted):** 도구/클라이언트/집계의 보일러플레이트, 테스트 케이스. 모든 API 가정은 코드 작성 전에 `curl`로 실측했고, 정확성은 단위·통합 테스트와 실 API 결과 육안 검증으로 확인.
+- **`MAX_STUDIES` sampling bias:** Queries exceeding the cap are aggregated on the top-N by relevance, so time_trend in particular is a sample, not a full census (flagged via `capped`). → Improvement: use per-year `countTotal` queries for exact time_trend counts.
+- **Multi-hop questions not implemented:** The prompt and examples focus on single-hop questions. The agent shape allows multi-hop ("top sponsors → their trends") in principle, but the dedicated tools and validation were out of scope. → Improvement: add tools that feed intermediate results into a subsequent search, plus stronger loop-prevention.
+- **HTTP client:** Calls via `httpx` consistently produced a 403 at CT.gov's edge (suspected TLS fingerprinting), so we switched to `requests`. Root-causing was deferred.
+- **LLM live-path example:** Because the submission environment has no API key, `example_runs.md` was generated in `scripted` mode (replaying tool sequences). The data, aggregation, and assembly are all real code/API output; with a key present, the same script runs via `run_agent` (the actual agent).
+- **Agent nondeterminism:** ReAct tool selection can vary between runs. Numerical correctness is enforced by the tools, but "which chart type gets picked" can differ — the prompt only guides. → Improvement: post-hoc validation and an eval set for tool selection.
+
+---
+
+## 7. AI-tool usage (integrity note)
+
+- **Tools used:** Claude Code (pair programming / code generation), web search (LangGraph single- vs multi-agent, ReAct tradeoffs).
+- **What I designed and decided (deliberate):** Overall architecture, the "LLM orchestrates only · numbers come from tools · response assembled from Session artifacts" principle, the rationale for ReAct and how to wall off its main risk (number generation), the deliberate omission of a name-normalization layer, the response schema and citation bucket-key convention, and the cap/top-N honesty machinery. (Initially built as a deterministic graph; then refactored to a ReAct agent for extensibility while keeping the compute core intact.)
+- **What was generated and then adapted (generated & adapted):** Boilerplate for tools/client/aggregation and the test cases. Every API assumption was empirically verified with `curl` before I wrote code, and correctness was validated via unit/integration tests and eyeballing real API output.

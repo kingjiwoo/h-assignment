@@ -1,7 +1,8 @@
-"""Provider-agnostic LLM 초기화.
+"""Provider-agnostic LLM initialization.
 
-ANTHROPIC_API_KEY / OPENAI_API_KEY 중 존재하는 쪽을 app/config.py가 이미 판별해두었으므로,
-여기서는 langchain의 init_chat_model에 provider:model 형식으로 넘기기만 한다.
+app/config.py has already decided which of ANTHROPIC_API_KEY / OPENAI_API_KEY is in
+play, so all this module does is hand langchain's `init_chat_model` the
+provider:model pair.
 """
 
 from functools import lru_cache

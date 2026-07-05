@@ -1,11 +1,11 @@
 "use client";
 
 const EXAMPLES = [
-  "Pembrolizumab 시험이 2015년부터 어떻게 늘어났나요?",
-  "당뇨병 시험은 Phase별로 어떻게 분포돼 있나요?",
-  "Alzheimer 임상시험을 모집 중인 나라는 어디가 많나요?",
-  "Nivolumab이랑 Pembrolizumab, Phase별로 비교해 주세요",
-  "폐암 시험의 스폰서와 약물 관계를 보여주세요",
+  "How have Pembrolizumab trials grown since 2015?",
+  "How are diabetes trials distributed by phase?",
+  "Which countries have the most recruiting Alzheimer's trials?",
+  "Compare Nivolumab and Pembrolizumab by phase",
+  "Show the sponsor–drug relationships in lung cancer trials",
 ];
 
 interface Props {

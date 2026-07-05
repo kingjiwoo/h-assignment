@@ -1,4 +1,4 @@
-"""집계 함수 단위 테스트 — 네트워크/LLM 없이 fixture만으로 검증."""
+"""Unit tests for the aggregation functions — verified against fixtures, no LLM/network."""
 
 import json
 from pathlib import Path
@@ -18,9 +18,9 @@ def test_time_trend_counts_by_start_year():
     result = aggregate_time_trend(FIXTURE)
     counts = {row["year"]: row["trial_count"] for row in result["data"]}
     assert counts == {2015: 2, 2020: 1}
-    # 연도 오름차순 정렬 확인
+    # Years must be in ascending order
     assert [r["year"] for r in result["data"]] == [2015, 2020]
-    # citation용 버킷에 nct_id가 담긴다
+    # Citation buckets carry nct_ids
     assert set(result["buckets"]["2015"]) == {"NCT001", "NCT002"}
 
 
@@ -40,7 +40,7 @@ def test_distribution_by_intervention_type():
 def test_geo_dedupes_country_within_study():
     result = aggregate_geo(FIXTURE)
     counts = {row["country"]: row["trial_count"] for row in result["data"]}
-    # NCT003은 Canada가 두 번 나오지만 study 단위로 1회만 카운트
+    # NCT003 lists Canada twice but is counted once per study
     assert counts["Canada"] == 2
     assert counts["United States"] == 2
 
@@ -48,7 +48,7 @@ def test_geo_dedupes_country_within_study():
 def test_network_sponsor_drug_edges_and_weights():
     result = aggregate_network(FIXTURE, "sponsor_drug")
     edges = {(e["source"], e["target"]): e["weight"] for e in result["data"]["edges"]}
-    # Sponsor X가 DrugA를 2개 study에서 사용 → weight 2
+    # Sponsor X uses DrugA in 2 studies → weight 2
     assert edges[("Sponsor X", "DrugA")] == 2
     assert edges[("Sponsor X", "DrugB")] == 1
     node_ids = {n["id"] for n in result["data"]["nodes"]}

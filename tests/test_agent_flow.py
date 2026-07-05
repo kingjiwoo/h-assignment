@@ -1,7 +1,7 @@
-"""에이전트 도구 + 응답 조립의 오프라인 통합 테스트.
+"""Offline integration tests for the agent tools + response assembly.
 
-실제 LLM/네트워크 없이, 새 통합 도구(analyze_*)를 직접 호출해 세션에 확정된 결과를 검증한다.
-CtGovClient는 fixture로 대체한다.
+Exercises the unified analyze_* tools directly (no real LLM/network) and verifies
+that the Session ends up in a finalized state. CtGovClient is replaced with a fixture.
 """
 
 import json
@@ -15,7 +15,7 @@ FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "sample_studies.json"
 
 
 class FakeClient:
-    """search_studies가 항상 fixture를 반환하는 가짜 클라이언트."""
+    """Fake client whose search_studies always returns the fixture."""
 
     def __init__(self, studies):
         self._studies = studies
@@ -35,13 +35,13 @@ def _tools(session, studies=FIXTURE):
 
 
 def test_analyze_distribution_finalizes_and_produces_citations():
-    """단일 도구 호출로 검색·집계·확정이 한 번에 끝나야 한다."""
+    """A single tool call should perform search + aggregate + commit atomically."""
     s = Session(input_filters={"condition": "diabetes"})
     tools, _ = _tools(s)
     out = tools["analyze_distribution"].invoke(
         {"field": "phase", "title": "Diabetes by phase", "condition": "diabetes"}
     )
-    assert "bar_chart 확정" in out
+    assert "Committed bar_chart" in out
     resp = assemble_response(s)
 
     assert resp["visualization"]["type"] == "bar_chart"
@@ -75,25 +75,25 @@ def test_analyze_time_trend_finalizes_time_series():
 
 
 def test_explicit_input_filter_overrides_llm_arg():
-    """요청에 명시된 필터가 LLM 도구 인자를 이긴다 (결정론적 보증)."""
+    """Filters declared on the request beat LLM-supplied tool arguments (deterministic guarantee)."""
     s = Session(input_filters={"condition": "diabetes"})
     tools, _ = _tools(s)
     tools["analyze_distribution"].invoke(
-        {"field": "phase", "title": "t", "condition": "cancer"}  # LLM이 엉뚱한 값
+        {"field": "phase", "title": "t", "condition": "cancer"}  # LLM supplied a wrong value
     )
     assert s.searches["default"].filters["condition"] == "diabetes"
 
 
 def test_no_filters_returns_error_without_finalize():
-    """필터가 하나도 없으면 검색 파라미터를 만들 수 없어 확정하지 않는다."""
+    """With no filters, the tool cannot build a search and must not commit anything."""
     s = Session(input_filters={})
     tools, client = _tools(s)
     out = tools["analyze_distribution"].invoke({"field": "phase", "title": "t"})
-    assert "필터가 비어" in out
-    assert client.call_count == 0  # CT.gov 호출조차 시도하지 않음
+    assert "No filters provided" in out
+    assert client.call_count == 0  # No CT.gov call should be attempted
     assert s.final_artifact_id is None
     resp = assemble_response(s)
-    # 검색이 한 번도 없었다 → needs_clarification 백스톱
+    # No search ever happened → needs_clarification backstop
     assert resp["visualization"]["type"] == "needs_clarification"
 
 
@@ -103,7 +103,7 @@ def test_analyze_distribution_rejects_unknown_field():
     out = tools["analyze_distribution"].invoke(
         {"field": "unknown_axis", "title": "t", "condition": "diabetes"}
     )
-    assert "미지원" in out
+    assert "Unsupported field" in out
     assert client.call_count == 0
     assert s.final_artifact_id is None
 
@@ -114,12 +114,12 @@ def test_analyze_comparison_requires_two_groups():
     out = tools["analyze_comparison"].invoke(
         {"filter_sets": [{"label": "A", "drug_name": "A"}], "title": "t"}
     )
-    assert "최소 2개" in out
+    assert "at least 2" in out
     assert s.final_artifact_id is None
 
 
 def test_analyze_comparison_parallel_fetch_reuses_cache_for_shared_filters():
-    """비교 시 동일 필터 조합은 fetch_cache가 재사용해 API 호출 횟수를 줄인다."""
+    """The fetch_cache dedupes identical filter combinations, cutting API calls."""
     s = Session(input_filters={})
     tools, client = _tools(s)
     tools["analyze_comparison"].invoke(
@@ -134,18 +134,19 @@ def test_analyze_comparison_parallel_fetch_reuses_cache_for_shared_filters():
     )
     resp = assemble_response(s)
     assert resp["visualization"]["type"] == "grouped_bar_chart"
-    # 필터가 실제로 다르므로 두 번 호출됨(캐시 미스). 최소한 도구 자체는 정상 진행.
+    # Filters differ so we expect two calls (cache misses); the tool itself must
+    # at least progress normally to completion.
     assert client.call_count == 2
 
 
 def test_zero_result_does_not_finalize():
-    """검색 결과가 0건이면 도구가 확정하지 않고, assemble은 no_data를 반환한다."""
+    """A zero-result search must not commit; assemble_response falls back to no_data."""
     s = Session(input_filters={})
     tools, _ = _tools(s, studies=[])
     out = tools["analyze_distribution"].invoke(
         {"field": "phase", "title": "t", "condition": "unobtainium"}
     )
-    assert "0건" in out
+    assert "No trials matched" in out
     assert s.final_artifact_id is None
     resp = assemble_response(s)
     assert resp["visualization"]["type"] == "no_data"

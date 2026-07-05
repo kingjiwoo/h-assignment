@@ -17,7 +17,7 @@ export function AssistantMessage({ message }: Props) {
     return (
       <div className="flex items-center gap-2 rounded-2xl border border-border bg-panel px-4 py-3 text-sm text-neutral-400">
         <Loader2 className="h-4 w-4 animate-spin text-accent" />
-        ClinicalTrials.gov 조회 및 집계 중…
+        Querying ClinicalTrials.gov and aggregating…
       </div>
     );
   }
@@ -25,7 +25,7 @@ export function AssistantMessage({ message }: Props) {
   if (message.role === "error") {
     return (
       <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-        {message.text ?? "에러가 발생했습니다."}
+        {message.text ?? "An error occurred."}
       </div>
     );
   }

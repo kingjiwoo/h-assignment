@@ -17,7 +17,7 @@ export default function ChatPage() {
             type="button"
             onClick={reset}
             disabled={empty}
-            title="새 대화 시작"
+            title="Start a new conversation"
             className="text-sm font-medium text-neutral-100 transition hover:text-white disabled:cursor-default disabled:text-neutral-100 disabled:hover:text-neutral-100"
           >
             ClinicalTrials.gov Query Agent
@@ -29,7 +29,7 @@ export default function ChatPage() {
                 onClick={reset}
                 className="rounded-md border border-border px-2 py-1 text-[11px] text-neutral-300 transition hover:border-neutral-500 hover:text-neutral-100"
               >
-                새 대화
+                New chat
               </button>
             )}
             <a

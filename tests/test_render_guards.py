@@ -1,9 +1,10 @@
-"""그래프 출력 검증 계층 단위 테스트 — LLM/네트워크 없이 오프라인 검증.
+"""Unit tests for the graph-output validation layers — offline, no LLM/network.
 
-- B (kind↔chart_type 정합): 통합 도구가 kind에서 chart_type을 결정론적으로 확정하므로
-  LLM 경로로는 어긋날 수 없다. 세션 직접 조작에 대한 안전벨트 테스트만 유지.
-- C (assemble_response의 빈 data → no_data 강등)
-- H (aggregate 표본 크기 정직성 노트)
+- B (kind↔chart_type consistency): the unified tools derive chart_type from kind
+  deterministically, so the LLM path can never diverge. Only the safety-belt test
+  against direct session tampering is kept.
+- C (assemble_response downgrades empty data → no_data)
+- H (aggregate honesty notes about sample size)
 """
 
 import json
@@ -37,12 +38,12 @@ def _tools(session, studies=FIXTURE):
 
 
 # ============================================================================
-# B — 통합 도구는 kind에서 chart_type을 자동 결정한다 (LLM이 뒤바꿀 통로 없음)
+# B — Unified tools decide chart_type from kind automatically (no LLM path to override)
 # ============================================================================
 
 
 def test_B_analyze_network_locks_chart_to_network_graph():
-    """analyze_network는 항상 kind=network, chart_type=network_graph를 확정한다."""
+    """analyze_network always commits kind=network with chart_type=network_graph."""
     s = Session(input_filters={})
     t = _tools(s)
     t["analyze_network"].invoke(
@@ -71,18 +72,18 @@ def test_B_analyze_time_trend_locks_chart_to_time_series():
 
 
 # ============================================================================
-# C — assemble_response의 빈 data → no_data 강등 (조립 단계)
+# C — assemble_response downgrades empty data → no_data (assembly stage)
 # ============================================================================
 
 
 def test_C_empty_list_data_downgrades_to_no_data():
-    """distribution artifact가 finalize됐지만 data가 [] → no_data로 강등."""
+    """A finalized distribution artifact with data=[] gets downgraded to no_data."""
     s = Session(input_filters={"condition": "x"})
     s.searches["default"] = SearchResult(label="default", studies=[{"_": 1}], capped=False, filters={})
     s.artifacts["distribution_1"] = Artifact(
         artifact_id="distribution_1",
         kind="distribution",
-        data=[],  # 실질 공허
+        data=[],  # effectively empty
         buckets={},
         notes=[],
         extra={},
@@ -94,11 +95,11 @@ def test_C_empty_list_data_downgrades_to_no_data():
     resp = assemble_response(s)
 
     assert resp["visualization"]["type"] == "no_data"
-    assert any("비어" in n for n in resp["meta"]["notes"])
+    assert any("empty" in n for n in resp["meta"]["notes"])
 
 
 def test_C_empty_network_data_downgrades_to_no_data():
-    """network artifact의 nodes/edges가 둘 다 비면 no_data 강등."""
+    """Network artifact with empty nodes and edges is downgraded to no_data."""
     s = Session(input_filters={})
     s.searches["default"] = SearchResult(label="default", studies=[{"_": 1}], capped=False, filters={})
     s.artifacts["network_1"] = Artifact(
@@ -119,12 +120,12 @@ def test_C_empty_network_data_downgrades_to_no_data():
 
 
 # ============================================================================
-# 안전벨트 — assemble_response의 kind↔chart_type 재검사 (세션 조작 우회 방어)
+# Safety belt — assemble_response re-checks kind↔chart_type (defends against session tampering)
 # ============================================================================
 
 
 def test_safety_belt_downgrades_kind_chart_mismatch():
-    """세션에 network artifact + bar_chart가 강제로 남아있어도 최종 응답에서 no_data 강등."""
+    """Even if the session is forced to hold network + bar_chart, the final response is no_data."""
     s = Session(input_filters={})
     s.searches["default"] = SearchResult(label="default", studies=[{"_": 1}], capped=False, filters={})
     s.artifacts["network_1"] = Artifact(
@@ -135,7 +136,7 @@ def test_safety_belt_downgrades_kind_chart_mismatch():
         notes=[],
         extra={},
     )
-    # 정상 경로에선 도구가 chart_type을 자동 결정하지만, 우회를 시뮬레이션.
+    # On the normal path a tool auto-derives chart_type; here we simulate a bypass.
     s.final_artifact_id = "network_1"
     s.final_chart_type = "bar_chart"
     s.final_title = "should be downgraded"
@@ -143,26 +144,26 @@ def test_safety_belt_downgrades_kind_chart_mismatch():
     resp = assemble_response(s)
 
     assert resp["visualization"]["type"] == "no_data"
-    assert any("정합성" in n for n in resp["meta"]["notes"])
+    assert any("consistency" in n for n in resp["meta"]["notes"])
 
 
 # ============================================================================
-# H — aggregate 표본 크기 정직성 노트
+# H — aggregation honesty notes about sample size
 # ============================================================================
 
 
 def test_H_time_trend_notes_include_sample_size():
     result = aggregate_time_trend(FIXTURE)
-    assert result["notes"], "notes가 채워져 있어야 한다"
-    assert f"{len(FIXTURE)}건" in result["notes"][0]
-    # StartDate 파싱된 건수도 함께 노출
-    assert "파싱 가능한" in result["notes"][0]
+    assert result["notes"], "notes should be populated"
+    assert f"{len(FIXTURE)} studies" in result["notes"][0]
+    # The number of studies with a parseable StartDate is also disclosed.
+    assert "parseable StartDate" in result["notes"][0]
 
 
 def test_H_distribution_notes_include_sample_size():
     result = aggregate_distribution(FIXTURE, "phase")
     assert result["notes"]
-    assert f"{len(FIXTURE)}건" in result["notes"][0]
+    assert f"{len(FIXTURE)} studies" in result["notes"][0]
     assert "field=phase" in result["notes"][0]
 
 
@@ -173,6 +174,6 @@ def test_H_comparison_notes_show_per_group_totals():
     ]
     result = aggregate_comparison(groups, "phase")
     note = result["notes"][0]
-    assert "A: 2건" in note
-    assert "B: 1건" in note
+    assert "A: 2 studies" in note
+    assert "B: 1 studies" in note
     assert "field=phase" in note

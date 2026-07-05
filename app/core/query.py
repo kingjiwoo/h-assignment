@@ -1,4 +1,4 @@
-"""필터 값 → ClinicalTrials.gov API query params 변환 (순수 함수)."""
+"""Filter values → ClinicalTrials.gov API query params conversion (pure functions)."""
 
 
 def build_ctgov_params(
@@ -12,10 +12,11 @@ def build_ctgov_params(
     end_year: int | None = None,
     overall_status: str | None = None,
 ) -> dict:
-    """개별 필터 값들로부터 CT.gov query params dict를 만든다.
+    """Build the CT.gov query-params dict from individual filter values.
 
-    - 텍스트 검색(query.*)은 CT.gov 검색엔진(Essie)이 브랜드명/동의어/오타를 자체 처리한다.
-    - phase와 연도 범위는 filter.advanced의 AREA 절로 AND 결합한다.
+    - Text search (query.*): CT.gov's search engine (Essie) already handles brand names,
+      synonyms, and typos itself.
+    - Phase and year range are ANDed together in filter.advanced using AREA clauses.
     """
     params: dict = {}
     if drug_name:

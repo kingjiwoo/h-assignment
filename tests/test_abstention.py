@@ -1,7 +1,8 @@
-"""honest abstention (needs_clarification) 단위 테스트 — LLM/네트워크 없이 검증.
+"""Unit tests for honest abstention (needs_clarification) — offline, no LLM/network.
 
-1겹(에이전트 자기선언)과 2겹(결정론 백스톱)이 각각 needs_clarification을 만들고,
-정상/0건 경로와 올바로 구분되는지 확인한다.
+Layer 1 (agent self-declaration) and layer 2 (deterministic backstop) each produce
+needs_clarification, and both must remain cleanly distinguishable from the normal
+and zero-result paths.
 """
 
 from app.agent.runner import assemble_response
@@ -9,22 +10,22 @@ from app.agent.session import Artifact, SearchResult, Session
 
 
 def test_layer1_report_unresolvable_yields_needs_clarification():
-    """1겹: 에이전트가 unresolved를 선언하면 needs_clarification 응답."""
+    """Layer 1: when the agent declares unresolved, the response is needs_clarification."""
     session = Session(input_filters={})
-    session.unresolved = {"reason": "질환·약물이 없습니다", "missing": ["condition", "drug_name"]}
+    session.unresolved = {"reason": "No condition or drug provided", "missing": ["condition", "drug_name"]}
 
     resp = assemble_response(session)
 
     assert resp["visualization"]["type"] == "needs_clarification"
-    assert resp["clarification"]["reason"] == "질환·약물이 없습니다"
+    assert resp["clarification"]["reason"] == "No condition or drug provided"
     assert resp["clarification"]["missing"] == ["condition", "drug_name"]
-    assert resp["clarification"]["suggestions"]  # 안내 문구가 채워짐
+    assert resp["clarification"]["suggestions"]  # Guidance messages are populated
 
 
 def test_layer2_backstop_no_search_yields_needs_clarification():
-    """2겹: unresolved 선언이 없어도, 유효 검색이 0번이면 백스톱이 needs_clarification."""
+    """Layer 2: even without an unresolved declaration, zero valid searches → needs_clarification."""
     session = Session(input_filters={})
-    # 검색도 finalize도 없음 (에이전트가 규칙을 어기고 아무것도 안 한 상황)
+    # No search, no finalize (the agent broke the rules and did nothing).
 
     resp = assemble_response(session)
 
@@ -33,7 +34,7 @@ def test_layer2_backstop_no_search_yields_needs_clarification():
 
 
 def test_searched_but_zero_results_is_no_data_not_clarification():
-    """검색은 했으나 0건이면 no_data (needs_clarification 아님) — 둘을 구분."""
+    """Searched but 0 hits → no_data (not needs_clarification). Keep the two paths distinct."""
     session = Session(input_filters={"drug_name": "Zzzznonexistent"})
     session.searches["default"] = SearchResult(
         label="default", studies=[], capped=False, filters={"drug_name": "Zzzznonexistent"}
@@ -46,7 +47,7 @@ def test_searched_but_zero_results_is_no_data_not_clarification():
 
 
 def test_normal_finalized_visualization_is_unaffected():
-    """정상 경로(검색+집계+finalize)는 needs_clarification과 무관하게 시각화를 반환."""
+    """A normal path (search + aggregate + finalize) yields a visualization untouched by clarification."""
     session = Session(input_filters={"condition": "diabetes"})
     session.searches["default"] = SearchResult(
         label="default", studies=[{"x": 1}], capped=False, filters={"condition": "diabetes"}

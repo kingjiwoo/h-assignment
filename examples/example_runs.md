@@ -1,19 +1,19 @@
-# 예시 실행 결과 (Example Runs)
+# Example Runs
 
-> 생성 모드: **scripted (도구 시퀀스 재현, 데이터·집계는 실제 API/코드)**
-> 모든 `data`/`citations` 값은 ClinicalTrials.gov v2 API의 실제 응답을 결정론적 도구가 집계한 것입니다.
-> `scripted` 모드에서는 에이전트가 런타임에 선택할 **도구 호출 순서만** 사람이 재현했고, 검색·집계·조립은 실제 코드가 그대로 실행했습니다(수치는 LLM을 거치지 않음).
+> Generation mode: **scripted (tool sequence replayed by a human; data and aggregation come from real API/code)**
+> Every `data` / `citations` value is aggregated from the real ClinicalTrials.gov v2 API response by the deterministic tools.
+> In `scripted` mode a human only replays the **order of tool calls** the agent would pick at runtime; the actual search, aggregation, and assembly all run through the real code (numbers never pass through the LLM).
 
-## Time trend — 특정 약물의 연도별 시험 수
+## Time trend — trial count per year for a specific drug
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "How has the number of Pembrolizumab trials changed per year since 2015?"
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {
@@ -263,9 +263,9 @@
 }
 ```
 
-## Distribution — 질환의 phase별 분포
+## Distribution — a condition's distribution by phase
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "How are diabetes trials distributed across phases?",
@@ -273,7 +273,7 @@
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {
@@ -409,16 +409,16 @@
 }
 ```
 
-## Comparison — 두 약물의 phase 비교
+## Comparison — two drugs compared by phase
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "Compare trial phases for Pembrolizumab vs Nivolumab."
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {
@@ -639,9 +639,9 @@
 }
 ```
 
-## Geographic — 국가별 모집중 시험 수
+## Geographic — recruiting trial counts by country
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "Which countries have the most recruiting trials for breast cancer?",
@@ -649,7 +649,7 @@
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {
@@ -1136,9 +1136,9 @@
 }
 ```
 
-## Network — 질환의 sponsor↔drug 관계망
+## Network — sponsor↔drug relationships for a condition
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "Show a network of sponsors and drugs for melanoma trials.",
@@ -1146,7 +1146,7 @@
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {
@@ -2259,16 +2259,16 @@
 }
 ```
 
-## Empty result — 존재하지 않는 약물(graceful handling)
+## Empty result — a nonexistent drug (graceful handling)
 
-**요청:**
+**Request:**
 ```json
 {
   "query": "How are trials for Zzzznonexistentdrug distributed across phases?"
 }
 ```
 
-**응답:**
+**Response:**
 ```json
 {
   "visualization": {

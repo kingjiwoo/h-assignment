@@ -1,12 +1,14 @@
-"""예시 쿼리를 실행해 examples/example_runs.md를 생성한다.
+"""Run the example queries and generate examples/example_runs.md.
 
-두 가지 모드:
-  - full: LLM 키가 있으면 run_agent()로 실제 에이전트가 도구를 오케스트레이션한다(실서비스 경로).
-  - scripted: 키가 없으면, 에이전트가 선택할 도구 호출 시퀀스를 사람이 스크립트로 재현한다.
-    데이터·집계·조립은 실제 코드(실제 CT.gov API)로 수행되며, 오직 "도구 선택/순서"만 사람이
-    대신 정한다. example_runs.md에 생성 모드를 표기한다.
+Two modes:
+  - full: When an LLM key is present, run_agent() drives the real agent through
+    tool orchestration (the actual production path).
+  - scripted: When no key is present, a human replays the tool-call sequence the
+    agent would pick. The search, aggregation, and assembly all run through the
+    real code (real CT.gov API); only tool selection/order is chosen by a human.
+    The generation mode is disclosed inside example_runs.md.
 
-사용:
+Usage:
   PYTHONPATH=. uv run python scripts/run_examples.py
 """
 
@@ -18,63 +20,74 @@ from app.agent.session import Session
 from app.agent.tools import make_tools
 from app.config import settings
 
-# 각 예시: (설명, 요청 payload, 에이전트가 밟을 것으로 기대되는 도구 시퀀스 함수)
-# 도구 시퀀스 함수는 make_tools로 만든 tools dict를 받아 실행한다.
+# Each example: (description, request payload, function that plays the expected tool sequence).
+# The sequence function receives the tools dict produced by make_tools and invokes them in order.
 
 
 def seq_time_trend(t):
-    t["search_trials"].invoke({"drug_name": "Pembrolizumab", "start_year": 2015})
-    t["aggregate_by"].invoke({"field": "year"})
-    t["finalize_visualization"].invoke(
-        {"artifact_id": "time_trend_1", "chart_type": "time_series", "title": "Pembrolizumab trials over time (since 2015)"}
+    t["analyze_time_trend"].invoke(
+        {
+            "title": "Pembrolizumab trials over time (since 2015)",
+            "drug_name": "Pembrolizumab",
+            "start_year": 2015,
+        }
     )
 
 
 def seq_distribution(t):
-    t["search_trials"].invoke({"condition": "diabetes"})
-    t["aggregate_by"].invoke({"field": "phase"})
-    t["finalize_visualization"].invoke(
-        {"artifact_id": "distribution_1", "chart_type": "bar_chart", "title": "Diabetes trials by phase"}
+    t["analyze_distribution"].invoke(
+        {"field": "phase", "title": "Diabetes trials by phase", "condition": "diabetes"}
     )
 
 
 def seq_comparison(t):
-    t["search_trials"].invoke({"label": "pembro", "drug_name": "Pembrolizumab"})
-    t["search_trials"].invoke({"label": "nivo", "drug_name": "Nivolumab"})
-    t["compare_groups"].invoke({"search_labels": ["pembro", "nivo"], "field": "phase"})
-    t["finalize_visualization"].invoke(
-        {"artifact_id": "comparison_1", "chart_type": "grouped_bar_chart", "title": "Pembrolizumab vs Nivolumab by phase"}
+    t["analyze_comparison"].invoke(
+        {
+            "filter_sets": [
+                {"label": "pembro", "drug_name": "Pembrolizumab"},
+                {"label": "nivo", "drug_name": "Nivolumab"},
+            ],
+            "title": "Pembrolizumab vs Nivolumab by phase",
+            "field": "phase",
+        }
     )
 
 
 def seq_geo(t):
-    t["search_trials"].invoke({"condition": "breast cancer", "overall_status": "RECRUITING"})
-    t["aggregate_by"].invoke({"field": "country"})
-    t["finalize_visualization"].invoke(
-        {"artifact_id": "geo_1", "chart_type": "bar_chart", "title": "Recruiting breast cancer trials by country"}
+    t["analyze_distribution"].invoke(
+        {
+            "field": "country",
+            "title": "Recruiting breast cancer trials by country",
+            "condition": "breast cancer",
+            "overall_status": "RECRUITING",
+        }
     )
 
 
 def seq_network(t):
-    t["search_trials"].invoke({"condition": "melanoma"})
-    t["build_network"].invoke({"dimension": "sponsor_drug"})
-    t["finalize_visualization"].invoke(
-        {"artifact_id": "network_1", "chart_type": "network_graph", "title": "Sponsor–drug network for melanoma"}
+    t["analyze_network"].invoke(
+        {
+            "dimension": "sponsor_drug",
+            "title": "Sponsor–drug network for melanoma",
+            "condition": "melanoma",
+        }
     )
 
 
 def seq_empty(t):
-    t["search_trials"].invoke({"drug_name": "Zzzznonexistentdrug"})
-    # 0건이면 에이전트는 집계/finalize 없이 종료 → no_data 응답
+    # Zero results → the tool exits without committing → no_data response.
+    t["analyze_distribution"].invoke(
+        {"field": "phase", "title": "(no results expected)", "drug_name": "Zzzznonexistentdrug"}
+    )
 
 
 EXAMPLES = [
-    ("Time trend — 특정 약물의 연도별 시험 수", {"query": "How has the number of Pembrolizumab trials changed per year since 2015?"}, seq_time_trend),
-    ("Distribution — 질환의 phase별 분포", {"query": "How are diabetes trials distributed across phases?", "condition": "diabetes"}, seq_distribution),
-    ("Comparison — 두 약물의 phase 비교", {"query": "Compare trial phases for Pembrolizumab vs Nivolumab."}, seq_comparison),
-    ("Geographic — 국가별 모집중 시험 수", {"query": "Which countries have the most recruiting trials for breast cancer?", "condition": "breast cancer"}, seq_geo),
-    ("Network — 질환의 sponsor↔drug 관계망", {"query": "Show a network of sponsors and drugs for melanoma trials.", "condition": "melanoma"}, seq_network),
-    ("Empty result — 존재하지 않는 약물(graceful handling)", {"query": "How are trials for Zzzznonexistentdrug distributed across phases?"}, seq_empty),
+    ("Time trend — trial count per year for a specific drug", {"query": "How has the number of Pembrolizumab trials changed per year since 2015?"}, seq_time_trend),
+    ("Distribution — a condition's distribution by phase", {"query": "How are diabetes trials distributed across phases?", "condition": "diabetes"}, seq_distribution),
+    ("Comparison — two drugs compared by phase", {"query": "Compare trial phases for Pembrolizumab vs Nivolumab."}, seq_comparison),
+    ("Geographic — recruiting trial counts by country", {"query": "Which countries have the most recruiting trials for breast cancer?", "condition": "breast cancer"}, seq_geo),
+    ("Network — sponsor↔drug relationships for a condition", {"query": "Show a network of sponsors and drugs for melanoma trials.", "condition": "melanoma"}, seq_network),
+    ("Empty result — a nonexistent drug (graceful handling)", {"query": "How are trials for Zzzznonexistentdrug distributed across phases?"}, seq_empty),
 ]
 
 
@@ -87,15 +100,19 @@ def run_scripted(payload: dict, seq) -> dict:
 
 def main() -> None:
     has_key = bool(settings.anthropic_api_key or settings.openai_api_key)
-    mode = "full (실제 react agent가 도구 오케스트레이션)" if has_key else "scripted (도구 시퀀스 재현, 데이터·집계는 실제 API/코드)"
+    mode = (
+        "full (the real ReAct agent orchestrates tools)"
+        if has_key
+        else "scripted (tool sequence replayed; data and aggregation come from real API/code)"
+    )
 
     lines = [
-        "# 예시 실행 결과 (Example Runs)",
+        "# Example Runs",
         "",
-        f"> 생성 모드: **{mode}**",
-        "> 모든 `data`/`citations` 값은 ClinicalTrials.gov v2 API의 실제 응답을 결정론적 도구가 집계한 것입니다.",
-        "> `scripted` 모드에서는 에이전트가 런타임에 선택할 **도구 호출 순서만** 사람이 재현했고,"
-        " 검색·집계·조립은 실제 코드가 그대로 실행했습니다(수치는 LLM을 거치지 않음).",
+        f"> Generation mode: **{mode}**",
+        "> Every `data` / `citations` value is aggregated from the real ClinicalTrials.gov v2 API response by the deterministic tools.",
+        "> In `scripted` mode a human only replays the **order of tool calls** the agent would pick at runtime;"
+        " the actual search, aggregation, and assembly all run through the real code (numbers never pass through the LLM).",
         "",
     ]
 
@@ -108,8 +125,8 @@ def main() -> None:
 
         lines += [
             f"## {title}", "",
-            "**요청:**", "```json", json.dumps(payload, ensure_ascii=False, indent=2), "```", "",
-            "**응답:**", "```json", json.dumps(result, ensure_ascii=False, indent=2), "```", "",
+            "**Request:**", "```json", json.dumps(payload, ensure_ascii=False, indent=2), "```", "",
+            "**Response:**", "```json", json.dumps(result, ensure_ascii=False, indent=2), "```", "",
         ]
 
     out = Path(__file__).parent.parent / "examples" / "example_runs.md"

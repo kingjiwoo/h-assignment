@@ -51,7 +51,7 @@ export function useChat() {
                 ...m,
                 role: "error",
                 pending: false,
-                text: `요청 실패: ${detail}`,
+                text: `Request failed: ${detail}`,
               }
             : m,
         ),

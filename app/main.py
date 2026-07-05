@@ -1,4 +1,4 @@
-"""FastAPI 진입점. POST /query 하나로 전체 파이프라인을 노출한다."""
+"""FastAPI entrypoint. Exposes the whole pipeline behind a single POST /query."""
 
 import logging
 import os
@@ -14,7 +14,7 @@ logger = logging.getLogger("ctgov-viz")
 
 app = FastAPI(
     title="ClinicalTrials.gov Query-to-Visualization Agent",
-    description="자연어 임상시험 질문을 구조화된 시각화 스펙(JSON)으로 변환하는 백엔드",
+    description="Backend that turns natural-language clinical-trial questions into structured visualization specs (JSON)",
     version="0.1.0",
 )
 
@@ -38,7 +38,7 @@ def health() -> dict:
 
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest) -> QueryResponse:
-    # 명시적으로 주어진 구조화 필드만 추려 LLM 값보다 우선하도록 전달
+    # Only pass explicitly supplied structured fields, so they win over LLM-extracted values.
     input_filters = req.model_dump(exclude_none=True, exclude={"query"})
 
     result = run_agent(req.query, input_filters)

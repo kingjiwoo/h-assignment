@@ -1,7 +1,7 @@
-"""study(protocolSection dict)에서 관심 필드를 안전하게 꺼내는 헬퍼 모음.
+"""Helpers to safely pull fields of interest out of a study (protocolSection dict).
 
-CT.gov 응답은 모듈/필드가 누락될 수 있으므로(예: designModule 없음, collaborators 없음)
-모든 접근을 방어적으로 처리한다. 집계 함수와 citation 부착이 공통으로 사용한다.
+CT.gov responses may omit modules/fields (e.g., no designModule, no collaborators),
+so every access is defensive. Shared by the aggregation functions and citation assembly.
 """
 
 
@@ -28,7 +28,7 @@ def start_year(study: dict) -> int | None:
 
 
 def phases(study: dict) -> list[str]:
-    """phase 리스트. 없으면 ['NA']로 정규화한다 (CT.gov도 미지정을 NA로 취급)."""
+    """List of phases; normalized to ['NA'] when missing (CT.gov also treats unspecified as NA)."""
     ph = study.get("designModule", {}).get("phases")
     return ph if ph else ["NA"]
 
@@ -42,12 +42,12 @@ def conditions(study: dict) -> list[str]:
 
 
 def interventions(study: dict) -> list[dict]:
-    """[{type, name}] 리스트. 없으면 빈 리스트."""
+    """List of [{type, name}]; empty list if none."""
     return study.get("armsInterventionsModule", {}).get("interventions", []) or []
 
 
 def drug_names(study: dict) -> list[str]:
-    """type이 DRUG 또는 BIOLOGICAL인 중재명만 (drug↔drug 네트워크 재료)."""
+    """Names of interventions whose type is DRUG or BIOLOGICAL (input for drug↔drug networks)."""
     names = []
     for iv in interventions(study):
         if iv.get("type") in ("DRUG", "BIOLOGICAL") and iv.get("name"):
@@ -60,7 +60,7 @@ def intervention_types(study: dict) -> list[str]:
 
 
 def countries(study: dict) -> list[str]:
-    """study가 진행되는 국가들(중복 제거). 한 study가 여러 국가를 가질 수 있다."""
+    """Countries the study is conducted in (deduped). A study can span multiple countries."""
     locs = study.get("contactsLocationsModule", {}).get("locations", []) or []
     seen = []
     for loc in locs:

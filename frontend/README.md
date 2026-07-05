@@ -1,52 +1,52 @@
 # Frontend — ClinicalTrials.gov Query Agent (Chat UI)
 
-백엔드(`app/`)의 `POST /query`를 호출해 시각화 스펙(JSON)을 받아 채팅형 UI로 렌더링하는 Next.js 15 SPA.
+Next.js 15 SPA that calls the backend (`app/`) `POST /query`, receives the visualization spec (JSON), and renders it as a chat-style UI.
 
 - **Stack:** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS
 - **Charts:** Vega-Lite (bar / grouped bar / time series) via `react-vega` + `react-force-graph-2d` (network)
-- **Renders:** 5개 시각화 타입 (`bar_chart`, `grouped_bar_chart`, `time_series`, `network_graph`, `no_data`) + Citations + Meta notes
+- **Renders:** 5 visualization types (`bar_chart`, `grouped_bar_chart`, `time_series`, `network_graph`, `no_data`) plus Citations and Meta notes
 
-## 실행
+## Running
 
 ```bash
-# 1) 백엔드 (루트에서)
+# 1) Backend (from the repo root)
 uv run uvicorn app.main:app --reload           # :8000
 
-# 2) 프론트엔드 (이 폴더에서)
-cp .env.local.example .env.local               # 백엔드 URL 커스텀 필요할 때만 수정
+# 2) Frontend (from this folder)
+cp .env.local.example .env.local               # Only edit if you need a custom backend URL
 pnpm install
 pnpm dev                                        # :3000
 ```
 
-브라우저에서 http://localhost:3000 → 예시 쿼리 칩 클릭 또는 자유 입력.
+Open http://localhost:3000 in your browser → click an example query chip or type your own.
 
-## 환경변수
+## Environment variables
 
-| 변수 | 기본값 | 설명 |
+| Variable | Default | Description |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` | 백엔드 base URL |
+| `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` | Backend base URL |
 
-백엔드의 CORS는 기본으로 `http://localhost:3000`, `http://127.0.0.1:3000`을 허용합니다. 다른 오리진에서 띄우려면 백엔드 `CORS_ALLOW_ORIGINS` 환경변수를 추가하세요.
+The backend's CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` by default. To host from another origin, add the `CORS_ALLOW_ORIGINS` env var on the backend.
 
-## 구조
+## Layout
 
 ```
 src/
-├── app/                       Next.js App Router 페이지
+├── app/                       Next.js App Router pages
 │   ├── layout.tsx
-│   ├── page.tsx               채팅 페이지 (유일한 route)
+│   ├── page.tsx               Chat page (the only route)
 │   └── globals.css
 ├── components/
 │   ├── ChatInput.tsx
 │   ├── MessageList.tsx
 │   ├── UserMessage.tsx
-│   ├── AssistantMessage.tsx   VisualizationCard + Meta + Citations 조립
-│   ├── VisualizationCard.tsx  viz.type → 차트 컴포넌트 dispatch
-│   ├── MetaNotes.tsx          study_count / capped / notes 표시
-│   ├── Citations.tsx          버킷별 접기/펴기 + CT.gov 링크
-│   ├── ExampleQueries.tsx     빈 상태에서 예시 5개 프리셋
+│   ├── AssistantMessage.tsx   Assembles VisualizationCard + Meta + Citations
+│   ├── VisualizationCard.tsx  Dispatches on viz.type → the matching chart component
+│   ├── MetaNotes.tsx          Displays study_count / capped / notes
+│   ├── Citations.tsx          Collapsible per-bucket list + CT.gov links
+│   ├── ExampleQueries.tsx     5 preset prompts shown on the empty state
 │   └── charts/
-│       ├── VegaChart.tsx        react-vega 얇은 래퍼
+│       ├── VegaChart.tsx        Thin wrapper around react-vega
 │       ├── TimeSeriesChart.tsx
 │       ├── BarChart.tsx
 │       ├── GroupedBarChart.tsx
@@ -55,14 +55,14 @@ src/
 ├── hooks/
 │   └── useChat.ts             messages[] state + send + abort
 └── lib/
-    ├── types.ts               백엔드 QueryResponse의 TS 미러
-    └── api.ts                 postQuery(): 타입드 fetch
+    ├── types.ts               TS mirror of the backend QueryResponse
+    └── api.ts                 postQuery(): typed fetch
 ```
 
-## 설계 메모
+## Design notes
 
-- **채팅 UX + single-turn 백엔드 호환**: 프론트가 자체적으로 messages 배열을 유지하되, 매 요청은 단일 `POST /query`. 백엔드가 향후 `conversation_id`를 지원하면 `lib/api.ts` + `hooks/useChat.ts` 두 파일만 수정.
-- **차트 라이브러리 분리 근거**: 백엔드의 `encoding`이 이미 Vega-Lite 스타일(`x.field/type`, `y.field/type`)이라 4개 타입은 Vega-Lite로 얇게 매핑. Network만 힘 기반 시뮬레이션이 필요해 `react-force-graph-2d`를 별도 사용.
-- **Network 상세**: `nodes[{id,kind,degree}]`, `edges[{source,target,weight}]` 그대로 사용 (백엔드 스펙). node 크기 = degree, edge 굵기 = weight, 색상 = kind.
-- **Citations**: 버킷별로 나눠 접기/펴기, `nct_id` 클릭 → `https://clinicaltrials.gov/study/{nct_id}` 새 탭.
-- **Vega SSR**: `react-vega` 컴포넌트는 브라우저 Canvas가 필요해 `"use client"` 컴포넌트에서만 사용. `next.config.mjs`에서 `canvas` 모듈은 브라우저 alias를 `false`로 두어 번들 경고 제거.
+- **Chat UX on top of a single-turn backend:** the frontend keeps its own `messages` array, but each request is one `POST /query`. If the backend later adds `conversation_id` support, only `lib/api.ts` and `hooks/useChat.ts` need to change.
+- **Why two chart libraries:** the backend's `encoding` is already Vega-Lite-shaped (`x.field/type`, `y.field/type`), so four of the five types map to Vega-Lite thinly. Only the network type needs a force simulation, hence `react-force-graph-2d`.
+- **Network details:** we use `nodes[{id,kind,degree}]` and `edges[{source,target,weight}]` verbatim from the backend spec. Node size = degree, edge width = weight, color = kind.
+- **Citations:** grouped by bucket with expand/collapse; clicking a `nct_id` opens `https://clinicaltrials.gov/study/{nct_id}` in a new tab.
+- **Vega SSR:** `react-vega` needs the browser canvas, so it is only used inside `"use client"` components. In `next.config.mjs` the `canvas` module is aliased to `false` for the browser bundle, silencing the bundle warning.

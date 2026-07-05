@@ -42,7 +42,7 @@ export function ChatInput({ onSubmit, disabled, placeholder }: Props) {
           onKeyDown={handleKeyDown}
           disabled={disabled}
           rows={1}
-          placeholder={placeholder ?? "임상시험에 관한 질문을 입력하세요..."}
+          placeholder={placeholder ?? "Ask a question about clinical trials..."}
           className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none disabled:opacity-60"
         />
         <button
@@ -59,7 +59,7 @@ export function ChatInput({ onSubmit, disabled, placeholder }: Props) {
         </button>
       </div>
       <p className="mt-1 px-1 text-[10px] text-neutral-500">
-        Enter = 전송 · Shift+Enter = 줄바꿈
+        Enter = send · Shift+Enter = newline
       </p>
     </form>
   );

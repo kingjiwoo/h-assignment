@@ -36,8 +36,8 @@ export function VisualizationCard({ spec, notes }: Props) {
     default:
       return (
         <NoDataCard
-          title={`지원하지 않는 시각화 타입: ${type}`}
-          notes={["백엔드가 새로운 차트 타입을 반환했습니다."]}
+          title={`Unsupported visualization type: ${type}`}
+          notes={["The backend returned a new chart type."]}
         />
       );
   }

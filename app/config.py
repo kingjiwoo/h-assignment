@@ -15,18 +15,19 @@ class Settings:
         self.ctgov_base_url = "https://clinicaltrials.gov/api/v2"
 
     def require_llm_key(self) -> None:
-        """LLM을 실제로 호출하기 직전에 키 존재를 검증한다(fail-fast).
+        """Validate the LLM key at call time (fail-fast).
 
-        import 시점이 아니라 사용 시점에 검증하므로, 데이터 집계 계층은 키 없이도 테스트/실행할 수 있다.
+        Validated at use time (not import time) so the data/aggregation layers can be
+        tested and run without any LLM key configured.
         """
         if self.llm_provider == "anthropic" and not self.anthropic_api_key:
-            raise RuntimeError("LLM_PROVIDER=anthropic이지만 ANTHROPIC_API_KEY가 설정되지 않았습니다.")
+            raise RuntimeError("LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set.")
         if self.llm_provider == "openai" and not self.openai_api_key:
-            raise RuntimeError("LLM_PROVIDER=openai이지만 OPENAI_API_KEY가 설정되지 않았습니다.")
+            raise RuntimeError("LLM_PROVIDER=openai but OPENAI_API_KEY is not set.")
         if not self.anthropic_api_key and not self.openai_api_key:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY 또는 OPENAI_API_KEY 중 하나는 반드시 설정되어야 합니다. "
-                ".env.example을 참고해 .env를 만드세요."
+                "Either ANTHROPIC_API_KEY or OPENAI_API_KEY must be set. "
+                "See .env.example and create a .env file."
             )
 
     def _default_provider(self) -> str:

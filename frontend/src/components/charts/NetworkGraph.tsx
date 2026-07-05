@@ -120,7 +120,7 @@ export function NetworkGraph({ title, data }: Props) {
             {kind}
           </span>
         ))}
-        <span>· 노드 {graphData.nodes.length} / 엣지 {graphData.links.length}</span>
+        <span>· {graphData.nodes.length} nodes / {graphData.links.length} edges</span>
       </div>
     </div>
   );

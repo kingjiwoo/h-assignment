@@ -1,11 +1,12 @@
-"""집계 함수 — 전부 순수 함수. LLM/네트워크 의존 없음, 오프라인 단위테스트 가능.
+"""Aggregation functions — all pure. No LLM/network dependency; unit-testable offline.
 
-각 함수는 다음 형태를 반환한다:
+Each function returns:
     {"data": <chart data>, "buckets": {bucket_key: [nct_id, ...]}, "notes": [...]}
-buckets는 citation 부착 시 각 데이터 포인트의 근거 study를 찾는 데 쓰인다.
+`buckets` is used to look up the source studies for each data point when attaching citations.
 
-이 모듈은 오케스트레이션(에이전트/그래프)과 무관한 "계산 코어"다. 에이전트 도구(app/agent/tools.py)가
-이 함수들을 호출하며, 모든 수치는 여기서 결정론적으로 계산된다(LLM이 숫자를 만들 경로 없음).
+This module is the deterministic "compute core," independent of any orchestration
+(agent/graph). Agent tools (app/agent/tools.py) call these functions, and every
+number is computed here — the LLM has no path to fabricate a number.
 """
 
 from collections import Counter, defaultdict
@@ -16,7 +17,7 @@ PHASE_ORDER = ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]
 
 
 def aggregate_time_trend(studies: list[dict]) -> dict:
-    """연도별 시작 시험 수."""
+    """Trial count by start year."""
     buckets: dict[str, list[str]] = defaultdict(list)
     for s in studies:
         y = ex.start_year(s)
@@ -29,12 +30,12 @@ def aggregate_time_trend(studies: list[dict]) -> dict:
         for year, ncts in sorted(buckets.items(), key=lambda kv: int(kv[0]))
     ]
     parsed = sum(len(v) for v in buckets.values())
-    notes = [f"집계 대상 {len(studies)}건 중 StartDate 파싱 가능한 {parsed}건 기준."]
+    notes = [f"Based on {parsed} of {len(studies)} studies with parseable StartDate."]
     return {"data": data, "buckets": dict(buckets), "notes": notes}
 
 
 def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
-    """phase / intervention_type / status 별 시험 수 분포."""
+    """Trial count distribution by phase / intervention_type / status."""
     buckets: dict[str, list[str]] = defaultdict(list)
     for s in studies:
         nct = ex.nct_id(s)
@@ -54,12 +55,12 @@ def aggregate_distribution(studies: list[dict], field: str = "phase") -> dict:
         keys = sorted(buckets, key=lambda k: len(buckets[k]), reverse=True)
 
     data = [{"category": k, "trial_count": len(buckets[k])} for k in keys]
-    notes = [f"집계 대상 {len(studies)}건 (필터 적용 후, field={field})."]
+    notes = [f"Aggregated {len(studies)} studies (after filtering, field={field})."]
     return {"data": data, "buckets": dict(buckets), "notes": notes}
 
 
 def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
-    """여러 그룹을 같은 축(기본 phase)으로 나란히 집계 → grouped bar chart용.
+    """Aggregate several groups side-by-side along a shared axis (default phase) — grouped bar chart.
 
     groups: [{"label": str, "studies": [study, ...]}, ...]
     """
@@ -94,8 +95,8 @@ def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
             buckets[f"{label}|{cat}"] = cat_buckets.get(cat, [])
         data.append(row)
 
-    totals = ", ".join(f"{g['label']}: {len(g['studies'])}건" for g in groups)
-    notes = [f"집계 대상 — {totals} (field={field})."]
+    totals = ", ".join(f"{g['label']}: {len(g['studies'])} studies" for g in groups)
+    notes = [f"Aggregated targets — {totals} (field={field})."]
     return {
         "data": data,
         "buckets": buckets,
@@ -105,20 +106,20 @@ def aggregate_comparison(groups: list[dict], field: str = "phase") -> dict:
 
 
 def aggregate_geo(studies: list[dict], top_n: int = 25) -> dict:
-    """국가별 시험 수. 한 study가 여러 국가를 가지면 각 국가에 study 단위로 1회 카운트.
+    """Trial count by country. A study spanning multiple countries counts once per country.
 
-    가독성/응답 크기를 위해 상위 top_n개 국가만 반환한다(초과 시 note로 표기).
+    Returns only the top_n countries (for readability and response size); exceedance is noted.
     """
     buckets: dict[str, list[str]] = defaultdict(list)
     for s in studies:
         nct = ex.nct_id(s)
-        for c in ex.countries(s):  # extractors.countries가 이미 study 내 중복 제거
+        for c in ex.countries(s):  # extractors.countries already dedupes within a study
             buckets[c].append(nct)
 
     keys = sorted(buckets, key=lambda k: len(buckets[k]), reverse=True)
     notes = []
     if len(keys) > top_n:
-        notes.append(f"국가 {len(keys)}개 중 상위 {top_n}개만 표시합니다.")
+        notes.append(f"Showing top {top_n} of {len(keys)} countries.")
         keys = keys[:top_n]
 
     data = [{"country": k, "trial_count": len(buckets[k])} for k in keys]
@@ -129,13 +130,14 @@ def aggregate_geo(studies: list[dict], top_n: int = 25) -> dict:
 def aggregate_network(
     studies: list[dict], dimension: str = "sponsor_drug", max_edges: int = 60
 ) -> dict:
-    """엔티티 관계망.
+    """Entity relationship graph.
 
-    - sponsor_drug: leadSponsor.name ↔ 각 DRUG intervention name
-    - drug_drug: 같은 study 내 DRUG intervention 2개 이상 → 모든 쌍을 co-occurrence 엣지로
-    엣지에는 weight(공유 study 수)와 근거 nct_id를 담는다. 응답 크기·가독성을 위해 weight
-    상위 max_edges개 엣지만 남기고, 남은 엣지에 연결된 노드만 반환한다(degree는 남은 엣지 기준
-    재계산). 초과 시 note로 표기한다.
+    - sponsor_drug: leadSponsor.name ↔ each DRUG intervention name
+    - drug_drug: two or more DRUG interventions in the same study → all pairs as co-occurrence edges
+    Each edge carries a weight (number of shared studies) and its source nct_ids. For response
+    size and readability, only the top max_edges (by weight) edges are kept, and only nodes
+    incident to those edges are returned (degree is recomputed on the retained edges).
+    Exceedance is noted.
     """
     edge_ncts: dict[tuple[str, str], list[str]] = defaultdict(list)
     node_kind: dict[str, str] = {}
@@ -162,7 +164,7 @@ def aggregate_network(
     notes = []
     if len(sorted_edges) > max_edges:
         notes.append(
-            f"엣지 {len(sorted_edges)}개 중 가중치 상위 {max_edges}개만 표시합니다(허브 중심 관계망)."
+            f"Showing top {max_edges} of {len(sorted_edges)} edges by weight (hub-focused graph)."
         )
         sorted_edges = sorted_edges[:max_edges]
 

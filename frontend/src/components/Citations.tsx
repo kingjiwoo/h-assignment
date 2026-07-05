@@ -22,7 +22,7 @@ export function Citations({ citations }: Props) {
       className="mt-4 rounded-lg border border-border bg-panel/60"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs text-neutral-300 hover:bg-panel">
-        <span>Citations · {total} 발췌 / {buckets.length} 버킷</span>
+        <span>Citations · {total} excerpts / {buckets.length} buckets</span>
         <ChevronDown
           className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
         />

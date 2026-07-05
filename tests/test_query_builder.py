@@ -1,4 +1,4 @@
-"""query_builder 파라미터 매핑 테스트."""
+"""Parameter-mapping tests for the query builder."""
 
 from app.core.query import build_ctgov_params
 
