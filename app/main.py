@@ -47,4 +47,5 @@ def query(req: QueryRequest) -> QueryResponse:
         visualization=result["visualization"],
         meta=result["meta"],
         citations=result.get("citations"),
+        clarification=result.get("clarification"),
     )

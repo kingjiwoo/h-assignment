@@ -252,10 +252,28 @@ def make_tools(session: Session, client: CtGovClient | None = None) -> list:
         session.final_title = title
         return f"확정 완료: {artifact_id} → {chart_type} ('{title}')"
 
+    @tool
+    def report_unresolvable(reason: str, missing: list[str] | None = None) -> str:
+        """질문만으로 무엇을 조회할지 특정할 수 없을 때 호출한다 (honest abstention).
+
+        조회 대상(질환/약물/스폰서/국가 등)이 질문에 전혀 없거나 너무 모호해서 근거 있는 검색을
+        구성할 수 없을 때 사용하라. 절대 임의로 값을 지어내 검색하지 말고, 이 도구로 "특정 불가"를
+        선언한 뒤 종료하라. 서버가 이를 사용자에게 그대로 전달한다.
+
+        Args:
+            reason: 왜 특정할 수 없는지 한 문장 설명.
+            missing: 부족한 항목들 (예: ['condition', 'drug_name']).
+        Returns:
+            선언이 접수되었다는 메시지.
+        """
+        session.unresolved = {"reason": reason, "missing": missing or []}
+        return f"특정 불가로 접수됨: {reason}. 추가 도구 호출 없이 종료하라."
+
     return [
         search_trials,
         aggregate_by,
         compare_groups,
         build_network,
         finalize_visualization,
+        report_unresolvable,
     ]

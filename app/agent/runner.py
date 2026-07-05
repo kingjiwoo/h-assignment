@@ -20,9 +20,13 @@ SYSTEM_PROMPT = """\
 search_trials → (aggregate_by | compare_groups | build_network) → finalize_visualization.
 
 반드시 지킬 규칙:
+0) 질문에서 조회 대상(질환/약물/스폰서/국가 등)을 특정할 수 없거나 너무 모호하면,
+   절대 값을 임의로 지어내 검색하지 마라. 대신 report_unresolvable(reason, missing)를 호출하고
+   종료하라. "모르겠으면 모른다고 말한다"가 추측보다 우선이다.
+   (예: "임상시험 통계 보여줘"처럼 질환·약물 언급이 전혀 없는 경우 → report_unresolvable)
 1) 어떤 수치도 네가 직접 만들지 마라. 모든 집계는 도구가 실제 데이터로 계산한다.
    너는 "어떤 검색을 하고 어떤 집계를 조합할지"만 결정한다.
-2) 항상 먼저 search_trials로 데이터를 확보한 뒤 집계 도구를 호출한다.
+2) 대상을 특정할 수 있으면, 먼저 search_trials로 데이터를 확보한 뒤 집계 도구를 호출한다.
 3) 질문 성격에 맞는 집계를 고른다:
    - 연도별 추이 → aggregate_by(field='year') → chart_type='time_series'
    - phase/intervention/status 분포 → aggregate_by(field=...) → 'bar_chart'
@@ -87,18 +91,71 @@ def _no_data_response(session: Session, reason: str) -> dict:
     }
 
 
+# missing 항목별로 사용자에게 안내할 후보 문구.
+_SUGGESTION_MAP = {
+    "condition": "질환명을 알려주세요 (예: 'melanoma', 'diabetes').",
+    "drug_name": "약물/중재명을 알려주세요 (예: 'Pembrolizumab').",
+    "sponsor": "스폰서명을 알려주세요.",
+    "country": "국가명을 알려주세요 (예: 'Canada').",
+}
+
+
+def _needs_clarification_response(session: Session, reason: str, missing: list[str]) -> dict:
+    """무엇을 조회할지 특정할 수 없을 때의 응답 (honest abstention).
+
+    no_data(조회했으나 0건)와 구분되는 별도 종료 상태. 사용자에게 무엇이 부족한지,
+    무엇을 추가하면 되는지 clarification 필드로 알려준다.
+    """
+    suggestions = [_SUGGESTION_MAP[m] for m in missing if m in _SUGGESTION_MAP]
+    if not suggestions:
+        suggestions = ["질환·약물·스폰서·국가 중 하나 이상을 질문에 포함해 주세요."]
+    return {
+        "visualization": {
+            "type": "needs_clarification",
+            "title": "질문을 특정할 수 없습니다",
+            "encoding": {},
+            "data": [],
+        },
+        "meta": {
+            "filters": session.input_filters,
+            "analysis_type": None,
+            "source": "clinicaltrials.gov",
+            "study_count": 0,
+            "capped": False,
+            "notes": session.notes + [reason],
+        },
+        "citations": None,
+        "clarification": {"reason": reason, "missing": missing, "suggestions": suggestions},
+    }
+
+
 def assemble_response(session: Session) -> dict:
     """Session 상태(도구가 채운 artifact)로부터 최종 QueryResponse dict를 조립한다.
 
     LLM과 무관한 순수 조립 단계라 오프라인에서도 테스트/재사용 가능하다.
     """
-    if not session.final_artifact_id:
-        reason = (
-            "조건에 맞는 시험을 찾지 못했습니다."
-            if _total_studies(session) == 0
-            else "에이전트가 시각화를 확정하지 못했습니다."
+    # 1겹: 에이전트가 "특정 불가"를 스스로 선언한 경우 (추측 대신 정직한 기권).
+    if session.unresolved:
+        return _needs_clarification_response(
+            session,
+            session.unresolved.get("reason") or "질문에서 조회 대상을 특정할 수 없습니다.",
+            session.unresolved.get("missing") or [],
         )
-        return _no_data_response(session, reason)
+
+    if not session.final_artifact_id:
+        # 2겹(결정론 백스톱): LLM이 규칙을 어겨 report_unresolvable를 안 불렀더라도,
+        # 유효한 검색이 한 번도 없었다면 = 조회 대상을 특정하지 못한 것 → needs_clarification.
+        if not session.searches:
+            return _needs_clarification_response(
+                session,
+                "질문에서 어떤 임상시험을 조회할지 특정할 수 없습니다.",
+                ["condition", "drug_name", "sponsor"],
+            )
+        # 검색은 했으나 결과가 0건 → no_data (조회 대상은 정해졌으나 데이터가 없음).
+        if _total_studies(session) == 0:
+            return _no_data_response(session, "조건에 맞는 시험을 찾지 못했습니다.")
+        # 검색 결과는 있으나 시각화를 확정하지 못함 (에이전트 미완).
+        return _no_data_response(session, "에이전트가 시각화를 확정하지 못했습니다.")
 
     artifact = session.artifacts[session.final_artifact_id]
     chart_type = session.final_chart_type
