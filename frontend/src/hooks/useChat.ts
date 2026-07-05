@@ -66,5 +66,12 @@ export function useChat() {
     abortRef.current?.abort();
   }, []);
 
-  return { messages, isSending, send, abort };
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setIsSending(false);
+  }, []);
+
+  return { messages, isSending, send, abort, reset };
 }
